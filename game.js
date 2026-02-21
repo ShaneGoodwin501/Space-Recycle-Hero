@@ -195,9 +195,9 @@
   };
 
   const cargoTypes = [
-    { name: 'small', r: 0.28, mass: 0.17, points: 50, color: '#9baec7' },
-    { name: 'medium', r: 0.38, mass: 0.3, points: 100, color: '#88a0b9' },
-    { name: 'large', r: 0.52, mass: 0.46, points: 200, color: '#c2a96e' },
+    { name: 'small', r: 0.14, mass: 0.17, points: 50, color: '#9baec7' },
+    { name: 'medium', r: 0.19, mass: 0.3, points: 100, color: '#88a0b9' },
+    { name: 'large', r: 0.26, mass: 0.46, points: 200, color: '#c2a96e' },
   ];
 
   const cargoShapes = ['rectangle', 'triangle', 'circle', 'trapezoid', 'diamond', 'hex'];
@@ -360,8 +360,8 @@
     if (num('Numpad3','Digit3')) ship.clawOpen = clamp(ship.clawOpen + CONFIG.clawRate * dt, 0, 1);
 
     ship.baseAngle = clamp(ship.baseAngle, -120 * Math.PI/180, 120 * Math.PI/180);
-    ship.seg1Angle = clamp(ship.seg1Angle, -0.2, 3.14);
-    ship.seg2Angle = clamp(ship.seg2Angle, -1.2, 3.14);
+    // Segment joints are intentionally unbounded for full 360° continuous control.
+
   }
 
   function updateShip(dt) {
@@ -524,6 +524,23 @@
       const speed = Math.hypot(c.vx, c.vy);
       if (speed < 0.2) c.restTimer += dt;
       else c.restTimer = 0;
+    }
+
+    // Tray catch: dropped/free cargo that enters tray bounds is caught and stored.
+    for (const c of cargos) {
+      if (c.scored || c.accepting || c.stored || c.grabbed) continue;
+      const local = rotate({ x: c.x - ship.x, y: c.y - ship.y }, -ship.angle);
+      const tr = shipShape.trayRect;
+      const inTray = local.x > tr.x + c.r && local.x < tr.x + tr.w - c.r && local.y > tr.y + c.r && local.y < tr.y + tr.h - c.r;
+      if (!inTray) continue;
+      c.stored = true;
+      c.vx = ship.vx;
+      c.vy = ship.vy;
+      c.localPos = { x: clamp(local.x, tr.x + c.r, tr.x + tr.w - c.r), y: clamp(local.y, tr.y + c.r, tr.y + tr.h - c.r) };
+      if (!ship.storedCargoIds.includes(c.id)) {
+        ship.storedCargoIds.push(c.id);
+        ship.cargoMass += c.mass;
+      }
     }
 
     // Tray storage: if grabbed cargo is lowered into tray and ship is landed/slow, snap store.
@@ -882,8 +899,8 @@
 
     function drawFinger(sign) {
       const root = { x: tip.x + n.x * open * sign, y: tip.y + n.y * open * sign };
-      const pA = { x: root.x + forward.x * 0.22, y: root.y + forward.y * 0.22 };
-      const pB = { x: root.x + n.x * 0.12 * sign, y: root.y + n.y * 0.12 * sign };
+      const pA = { x: root.x + forward.x * 0.44, y: root.y + forward.y * 0.44 };
+      const pB = { x: root.x + n.x * 0.24 * sign, y: root.y + n.y * 0.24 * sign };
       ctx.fillStyle = '#ffffff';
       ctx.beginPath();
       ctx.moveTo(root.x * m, root.y * m);
