@@ -36,7 +36,7 @@
 
     respawnSeconds: 2,
 
-    cargoCount: 34,
+    cargoCount: 51,
   };
 
   const canvas = document.getElementById('gameCanvas');
@@ -63,10 +63,7 @@
   window.addEventListener('keydown', (e) => {
     if (blocked.has(e.code)) e.preventDefault();
     keys.add(e.code);
-    if (e.code === 'Space' && game.state === 'READY') {
-      game.state = 'PLAYING';
-      game.showHelp = false;
-    }
+    if (e.code === 'Space' && game.state === 'READY') startMission();
     if (e.code === 'KeyH') game.showHelp = !game.showHelp;
     if (e.code === 'Escape' && game.state !== 'CRASHED' && game.state !== 'READY') game.paused = !game.paused;
   }, { passive: false });
@@ -134,16 +131,31 @@
     return lerp(p1.y, p2.y, t);
   }
 
-  const terrain = generateTerrain();
-  const stars = Array.from({ length: CONFIG.starCount }, () => ({
-    x: Math.random() * CONFIG.worldWidth,
-    y: Math.random() * 45,
-    r: Math.random() * 1.7 + 0.2,
-    a: Math.random() * 0.7 + 0.2,
-  }));
+  let terrain = generateTerrain();
+  let stars = [];
+
+  function regenerateStars() {
+    stars = Array.from({ length: CONFIG.starCount }, () => ({
+      x: Math.random() * CONFIG.worldWidth,
+      y: Math.random() * 45,
+      r: Math.random() * 1.7 + 0.2,
+      a: Math.random() * 0.7 + 0.2,
+    }));
+  }
+  regenerateStars();
 
   function terrainY(x) {
     return sampleHeightRaw(terrain.points, clamp(x, 0, CONFIG.worldWidth));
+  }
+
+  function terrainMetrics() {
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const p of terrain.points) {
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    }
+    return { minY, maxY, height: Math.max(1, maxY - minY) };
   }
 
   const shipSpawn = { x: 16, y: 0 };
@@ -202,8 +214,9 @@
 
   const cargoShapes = ['rectangle', 'triangle', 'circle', 'trapezoid', 'diamond', 'hex'];
 
-  const cargos = [];
+  let cargos = [];
   function spawnCargo() {
+    cargos = [];
     for (let i = 0; i < CONFIG.cargoCount; i++) {
       const type = cargoTypes[Math.floor(Math.random() * cargoTypes.length)];
       const x = 20 + Math.random() * (CONFIG.worldWidth - 30);
@@ -247,6 +260,41 @@
     crunchFx: [],
   };
 
+
+  function randomizeWorld() {
+    terrain = generateTerrain();
+    regenerateStars();
+    spawnCargo();
+  }
+
+  function startMission() {
+    game.score = 0;
+    game.explosions = [];
+    game.crunchFx = [];
+    ship.grabbedCargo = null;
+    ship.storedCargoIds = [];
+    ship.cargoMass = 0;
+    ship.throttle = 0;
+    ship.fuel = 100;
+    ship.baseAngle = 0;
+    ship.seg1Angle = 2.9;
+    ship.seg2Angle = 3.05;
+    ship.clawOpen = 1;
+    ship.bounceCount = 0;
+    ship.settleLock = false;
+    ship.angle = 0;
+    ship.av = 0;
+    randomizeWorld();
+    shipSpawn.y = terrainY(shipSpawn.x) - shipShape.skidL.y;
+    ship.x = shipSpawn.x;
+    ship.y = shipSpawn.y;
+    setShipOnGround();
+    game.camera.x = ship.x;
+    game.camera.y = ship.y - 6;
+    game.state = 'PLAYING';
+    game.showHelp = false;
+  }
+
   function setShipOnGround() {
     const skidL = worldFromLocal(ship, shipShape.skidL);
     const skidR = worldFromLocal(ship, shipShape.skidR);
@@ -259,6 +307,7 @@
     ship.landed = true;
   }
 
+  randomizeWorld();
   shipSpawn.y = terrainY(shipSpawn.x) - shipShape.skidL.y;
   ship.x = shipSpawn.x;
   ship.y = shipSpawn.y;
@@ -369,7 +418,10 @@
 
     const flying = !ship.landed || ship.throttle > 0.02 || Math.hypot(ship.vx, ship.vy) > 0.4;
     if (flying) {
-      const burn = (CONFIG.fuelBurnBase + CONFIG.fuelBurnByThrottle * ship.throttle) * dt;
+      const m = terrainMetrics();
+      const highAltitudeThreshold = m.minY - (m.height * 2);
+      const highAltitudeMultiplier = ship.y < highAltitudeThreshold ? 1.5 : 1;
+      const burn = (CONFIG.fuelBurnBase + CONFIG.fuelBurnByThrottle * ship.throttle) * highAltitudeMultiplier * dt;
       ship.fuel = clamp(ship.fuel - burn, 0, 100);
     }
 
@@ -636,9 +688,18 @@
     const maxX = CONFIG.worldWidth - viewW * 0.5;
     targetX = clamp(targetX, minX, maxX);
 
-    const targetY = clamp(ship.y - 5.2, 5, 24);
+    const targetY = ship.y - 5.2;
     game.camera.x = lerp(game.camera.x, targetX, clamp(CONFIG.cameraSmooth * dt, 0, 1));
-    game.camera.y = lerp(game.camera.y, targetY, clamp(3 * dt, 0, 1));
+    game.camera.y = lerp(game.camera.y, targetY, clamp(6 * dt, 0, 1));
+
+    const shipScreenX = (ship.x - game.camera.x) * CONFIG.METER_TO_PX + W / 2;
+    const shipScreenY = (ship.y - game.camera.y) * CONFIG.METER_TO_PX + H / 2;
+    if (shipScreenX < W * 0.1 || shipScreenX > W * 0.9) {
+      game.camera.x = ship.x;
+    }
+    if (shipScreenY < H * 0.15 || shipScreenY > H * 0.85) {
+      game.camera.y = targetY;
+    }
   }
 
   function updateExplosions(dt) {
