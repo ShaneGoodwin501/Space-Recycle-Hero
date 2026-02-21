@@ -262,8 +262,8 @@
     const base = worldFromLocal(ship, shipShape.craneBase);
     const shipUpAngle = ship.angle - Math.PI / 2;
     const a0 = shipUpAngle + ship.baseAngle;
-    const seg1Len = 0.95;
-    const seg2Len = 0.85;
+    const seg1Len = 2.85;
+    const seg2Len = 2.55;
     const p1 = { x: base.x + Math.cos(a0) * seg1Len, y: base.y + Math.sin(a0) * seg1Len };
     const a1 = a0 + (ship.seg1Angle - Math.PI / 2);
     const p2 = { x: p1.x + Math.cos(a1) * seg2Len, y: p1.y + Math.sin(a1) * seg2Len };
@@ -766,14 +766,14 @@
     // Crane segments
     const base = shipShape.craneBase;
     const bAng = -Math.PI / 2 + ship.baseAngle;
-    const seg1Len = 0.95;
-    const seg2Len = 0.85;
+    const seg1Len = 2.85;
+    const seg2Len = 2.55;
     const p1 = { x: base.x + Math.cos(bAng) * seg1Len, y: base.y + Math.sin(bAng) * seg1Len };
     const a1 = bAng + (ship.seg1Angle - Math.PI / 2);
     const p2 = { x: p1.x + Math.cos(a1) * seg2Len, y: p1.y + Math.sin(a1) * seg2Len };
     const a2 = a1 + (ship.seg2Angle - Math.PI / 2);
 
-    ctx.strokeStyle = '#ffcc66';
+    ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 4;
     ctx.beginPath();
     ctx.moveTo(base.x * m, base.y * m);
@@ -791,14 +791,14 @@
       const baseP = { x: tip.x + n.x * open * sign, y: tip.y + n.y * open * sign };
       const pA = { x: baseP.x + forward.x * 0.2, y: baseP.y + forward.y * 0.2 };
       const pB = { x: baseP.x + n.x * 0.1 * sign, y: baseP.y + n.y * 0.1 * sign };
-      ctx.fillStyle = '#f3f5fa';
+      ctx.fillStyle = '#ffffff';
       ctx.beginPath();
       ctx.moveTo(baseP.x * m, baseP.y * m);
       ctx.lineTo(pA.x * m, pA.y * m);
       ctx.lineTo(pB.x * m, pB.y * m);
       ctx.closePath();
       ctx.fill();
-      ctx.strokeStyle = '#1b1f28';
+      ctx.strokeStyle = '#ffffff';
       ctx.stroke();
     }
     drawFinger(1);
