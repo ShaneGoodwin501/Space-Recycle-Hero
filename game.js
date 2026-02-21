@@ -7,7 +7,7 @@
   const CONFIG = {
     METER_TO_PX: 40,
     gravity: 1.62,
-    thrustMax: 32,
+    thrustMax: 10,
     torqueAccel: 2.8,
     angularDamping: 0.35,
     linearDamping: 0.02,
@@ -35,7 +35,7 @@
 
     respawnSeconds: 2,
 
-    cargoCount: 16,
+    cargoCount: 34,
   };
 
   const canvas = document.getElementById('gameCanvas');
@@ -165,8 +165,8 @@
     crashTimer: 0,
 
     baseAngle: 0,
-    seg1Angle: 2.2,
-    seg2Angle: 1.6,
+    seg1Angle: 2.9,
+    seg2Angle: 3.05,
     clawOpen: 1,
 
     grabbedCargo: null,
@@ -187,7 +187,7 @@
     skidL: { x: -0.45, y: 0.78 },
     skidR: { x: 0.45, y: 0.78 },
     thruster: { x: 0, y: 0.58 },
-    trayRect: { x: -1.6, y: -0.45, w: 1.1, h: 0.9 },
+    trayRect: { x: -2.15, y: -0.45, w: 1.65, h: 0.9 },
     craneBase: { x: 0, y: -0.92 },
   };
 
@@ -197,12 +197,15 @@
     { name: 'large', r: 0.52, mass: 0.46, points: 200, color: '#c2a96e' },
   ];
 
+  const cargoShapes = ['rectangle', 'triangle', 'circle', 'trapezoid', 'diamond', 'hex'];
+
   const cargos = [];
   function spawnCargo() {
     for (let i = 0; i < CONFIG.cargoCount; i++) {
       const type = cargoTypes[Math.floor(Math.random() * cargoTypes.length)];
-      const x = 22 + Math.random() * (CONFIG.worldWidth - 36);
-      const y = terrainY(x) - 0.9 - Math.random() * 2.4;
+      const x = 20 + Math.random() * (CONFIG.worldWidth - 30);
+      const y = terrainY(x) - type.r - Math.random() * 0.35;
+      const hue = Math.floor((i * 37 + Math.random() * 25) % 360);
       cargos.push({
         id: `c${i}`,
         x, y,
@@ -213,8 +216,10 @@
         r: type.r,
         mass: type.mass,
         points: type.points,
-        color: type.color,
+        color: `hsl(${hue} 68% 68%)`,
+        accent: `hsl(${(hue + 180) % 360} 78% 36%)`,
         type: type.name,
+        shape: cargoShapes[i % cargoShapes.length],
         grabbed: false,
         stored: false,
         scored: false,
@@ -262,8 +267,8 @@
     const base = worldFromLocal(ship, shipShape.craneBase);
     const shipUpAngle = ship.angle - Math.PI / 2;
     const a0 = shipUpAngle + ship.baseAngle;
-    const seg1Len = 2.85;
-    const seg2Len = 2.55;
+    const seg1Len = 2.14;
+    const seg2Len = 1.91;
     const p1 = { x: base.x + Math.cos(a0) * seg1Len, y: base.y + Math.sin(a0) * seg1Len };
     const a1 = a0 + (ship.seg1Angle - Math.PI / 2);
     const p2 = { x: p1.x + Math.cos(a1) * seg2Len, y: p1.y + Math.sin(a1) * seg2Len };
@@ -318,8 +323,8 @@
     ship.fuel = 100;
     ship.landed = true;
     ship.baseAngle = 0;
-    ship.seg1Angle = 2.2;
-    ship.seg2Angle = 1.6;
+    ship.seg1Angle = 2.9;
+    ship.seg2Angle = 3.05;
     ship.clawOpen = 1;
     ship.grabbedCargo = null;
     ship.storedCargoIds = [];
@@ -348,8 +353,8 @@
     if (num('Numpad3','Digit3')) ship.clawOpen = clamp(ship.clawOpen + CONFIG.clawRate * dt, 0, 1);
 
     ship.baseAngle = clamp(ship.baseAngle, -120 * Math.PI/180, 120 * Math.PI/180);
-    ship.seg1Angle = clamp(ship.seg1Angle, 0.3, 2.8);
-    ship.seg2Angle = clamp(ship.seg2Angle, -0.35, 2.8);
+    ship.seg1Angle = clamp(ship.seg1Angle, -0.2, 3.14);
+    ship.seg2Angle = clamp(ship.seg2Angle, -1.2, 3.14);
   }
 
   function updateShip(dt) {
@@ -654,7 +659,7 @@
       const right = toScreen(pad.x + pad.w / 2, pad.y);
 
       ctx.strokeStyle = pad.kind === 'recycle' ? '#6cff9f' : '#66d7ff';
-      ctx.lineWidth = 4;
+      ctx.lineWidth = 6.4;
       ctx.beginPath();
       ctx.moveTo(left.x, left.y - 2);
       ctx.lineTo(right.x, right.y - 2);
@@ -698,19 +703,69 @@
     ctx.translate(s.x, s.y);
     ctx.rotate(c.angle);
     ctx.fillStyle = c.color;
-    ctx.beginPath();
-    if (c.type === 'small') {
-      ctx.rect(-r * 0.9, -r * 0.5, r * 1.8, r);
-    } else if (c.type === 'medium') {
-      ctx.moveTo(-r, -r * 0.7); ctx.lineTo(r, -r * 0.2); ctx.lineTo(r * 0.7, r); ctx.lineTo(-r * 0.8, r * 0.7); ctx.closePath();
-    } else {
-      ctx.arc(0, 0, r, 0, Math.PI * 2);
-      ctx.moveTo(-r * 0.8, -r * 0.2); ctx.lineTo(r * 0.8, r * 0.2);
-    }
-    ctx.fill();
-    ctx.strokeStyle = '#101217';
+    ctx.strokeStyle = '#dfe7ff';
     ctx.lineWidth = 2;
+
+    // Diverse ship-part silhouettes.
+    if (c.shape === 'rectangle') {
+      ctx.beginPath();
+      ctx.rect(-r, -r * 0.55, r * 2, r * 1.1);
+      ctx.fill();
+      ctx.stroke();
+    } else if (c.shape === 'triangle') {
+      ctx.beginPath();
+      ctx.moveTo(0, -r);
+      ctx.lineTo(r, r * 0.9);
+      ctx.lineTo(-r, r * 0.9);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else if (c.shape === 'circle') {
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    } else if (c.shape === 'trapezoid') {
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.6, -r);
+      ctx.lineTo(r * 0.6, -r);
+      ctx.lineTo(r, r);
+      ctx.lineTo(-r, r);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else if (c.shape === 'diamond') {
+      ctx.beginPath();
+      ctx.moveTo(0, -r);
+      ctx.lineTo(r, 0);
+      ctx.lineTo(0, r);
+      ctx.lineTo(-r, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = i * Math.PI / 3;
+        const px = Math.cos(a) * r;
+        const py = Math.sin(a) * r;
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // small panel details to sell "ship part" look
+    ctx.strokeStyle = c.accent;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.7, -r * 0.2);
+    ctx.lineTo(r * 0.7, -r * 0.2);
+    ctx.moveTo(-r * 0.5, r * 0.25);
+    ctx.lineTo(r * 0.5, r * 0.25);
     ctx.stroke();
+
     ctx.restore();
   }
 
@@ -766,15 +821,15 @@
     // Crane segments
     const base = shipShape.craneBase;
     const bAng = -Math.PI / 2 + ship.baseAngle;
-    const seg1Len = 2.85;
-    const seg2Len = 2.55;
+    const seg1Len = 2.14;
+    const seg2Len = 1.91;
     const p1 = { x: base.x + Math.cos(bAng) * seg1Len, y: base.y + Math.sin(bAng) * seg1Len };
     const a1 = bAng + (ship.seg1Angle - Math.PI / 2);
     const p2 = { x: p1.x + Math.cos(a1) * seg2Len, y: p1.y + Math.sin(a1) * seg2Len };
     const a2 = a1 + (ship.seg2Angle - Math.PI / 2);
 
     ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 4;
+    ctx.lineWidth = 6.4;
     ctx.beginPath();
     ctx.moveTo(base.x * m, base.y * m);
     ctx.lineTo(p1.x * m, p1.y * m);
