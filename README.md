@@ -39,6 +39,7 @@ If you want score persistence later, you can add a `save_score.php` endpoint wit
 - **3**: open claw
 
 ### Other
+- **Space**: start mission from landed standby
 - **H**: toggle help overlay
 - **Esc**: pause/resume
 

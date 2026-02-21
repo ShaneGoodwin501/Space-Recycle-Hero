@@ -13,12 +13,14 @@
     linearDamping: 0.02,
 
     throttleRampPerSec: 0.25,
-    fuelBurnBase: 0.6,
-    fuelBurnByThrottle: 2.0,
+    fuelBurnBase: 0.08,
+    fuelBurnByThrottle: 0.55,
 
     landingMaxAngleDeg: 15,
     landingMaxVY: 2.0,
     landingMaxSpeed: 2.4,
+    landingBounceVY: 3.4,
+    landingCrashVY: 5.6,
 
     clawRate: 0.7,
     baseRate: 95 * Math.PI / 180,
@@ -60,8 +62,12 @@
   window.addEventListener('keydown', (e) => {
     if (blocked.has(e.code)) e.preventDefault();
     keys.add(e.code);
+    if (e.code === 'Space' && game.state === 'READY') {
+      game.state = 'PLAYING';
+      game.showHelp = false;
+    }
     if (e.code === 'KeyH') game.showHelp = !game.showHelp;
-    if (e.code === 'Escape' && game.state !== 'CRASHED') game.paused = !game.paused;
+    if (e.code === 'Escape' && game.state !== 'CRASHED' && game.state !== 'READY') game.paused = !game.paused;
   }, { passive: false });
   window.addEventListener('keyup', (e) => {
     if (blocked.has(e.code)) e.preventDefault();
@@ -139,7 +145,7 @@
     return sampleHeightRaw(terrain.points, clamp(x, 0, CONFIG.worldWidth));
   }
 
-  const shipSpawn = { x: 16, y: terrainY(16) - 1.35 };
+  const shipSpawn = { x: 16, y: 0 };
   const ship = {
     x: shipSpawn.x,
     y: shipSpawn.y,
@@ -181,7 +187,7 @@
     skidL: { x: -0.45, y: 0.78 },
     skidR: { x: 0.45, y: 0.78 },
     thruster: { x: 0, y: 0.58 },
-    trayRect: { x: -1.25, y: -0.05, w: 1.0, h: 0.6 },
+    trayRect: { x: -1.6, y: -0.45, w: 1.1, h: 0.9 },
     craneBase: { x: 0, y: -0.92 },
   };
 
@@ -212,6 +218,10 @@
         grabbed: false,
         stored: false,
         scored: false,
+        accepting: false,
+        acceptedTimer: 0,
+        targetX: 0,
+        targetY: 0,
         restTimer: 0,
         localPos: { x: 0, y: 0 },
       });
@@ -223,10 +233,30 @@
     score: 0,
     showHelp: true,
     paused: false,
-    state: 'PLAYING',
+    state: 'READY',
     camera: { x: ship.x, y: ship.y - 6 },
     explosions: [],
+    crunchFx: [],
   };
+
+  function setShipOnGround() {
+    const skidL = worldFromLocal(ship, shipShape.skidL);
+    const skidR = worldFromLocal(ship, shipShape.skidR);
+    const gyL = terrainY(skidL.x);
+    const gyR = terrainY(skidR.x);
+    ship.y += Math.min(gyL - skidL.y, gyR - skidR.y);
+    ship.vx = 0;
+    ship.vy = 0;
+    ship.av = 0;
+    ship.landed = true;
+  }
+
+  shipSpawn.y = terrainY(shipSpawn.x) - shipShape.skidL.y;
+  ship.x = shipSpawn.x;
+  ship.y = shipSpawn.y;
+  setShipOnGround();
+  game.camera.x = ship.x;
+  game.camera.y = ship.y - 6;
 
   function getArmKinematics() {
     const base = worldFromLocal(ship, shipShape.craneBase);
@@ -294,7 +324,10 @@
     ship.grabbedCargo = null;
     ship.storedCargoIds = [];
     ship.cargoMass = 0;
-    game.state = 'PLAYING';
+    setShipOnGround();
+    game.camera.x = ship.x;
+    game.camera.y = ship.y - 6;
+    game.state = 'READY';
   }
 
   function updateInput(dt) {
@@ -349,11 +382,8 @@
     const skidR = worldFromLocal(ship, shipShape.skidR);
     const hullCenter = { x: ship.x, y: ship.y };
 
-    const hullHitTerrain = hullCenter.y + shipShape.hullRadius > terrainY(hullCenter.x);
-    if (hullHitTerrain) return crashShip('hull-terrain');
-
     for (const c of cargos) {
-      if (c.scored || c.stored || c.grabbed) continue;
+      if (c.scored || c.accepting || c.stored || c.grabbed) continue;
       if (Math.hypot(c.x - hullCenter.x, c.y - hullCenter.y) < c.r + shipShape.hullRadius * 0.8) {
         return crashShip('hull-cargo');
       }
@@ -368,11 +398,29 @@
     const speedOk = speed < CONFIG.landingMaxSpeed;
 
     const hasSkid = skidLContact || skidRContact;
-    if (hasSkid && (!angleOk || !verticalOk || !speedOk)) {
+    if (hasSkid && !angleOk) {
       return crashShip('bad-landing');
     }
 
-    ship.landed = hasSkid && angleOk && speedOk;
+    if (hasSkid && angleOk && Math.abs(ship.vy) > CONFIG.landingMaxVY && Math.abs(ship.vy) <= CONFIG.landingBounceVY) {
+      ship.vy = -Math.abs(ship.vy) * 0.28;
+      ship.vx *= 0.84;
+      ship.av *= 0.7;
+    }
+
+    if (hasSkid && Math.abs(ship.vy) > CONFIG.landingCrashVY) return crashShip('hard-impact');
+
+    let hullHitTerrain = false;
+    for (const p of shipShape.hullPoints) {
+      const w = worldFromLocal(ship, p);
+      if (w.y > terrainY(w.x) - 0.02) {
+        hullHitTerrain = true;
+        break;
+      }
+    }
+    if (hullHitTerrain && !hasSkid) return crashShip('hull-terrain');
+
+    ship.landed = hasSkid && angleOk && speedOk && verticalOk;
     if (ship.landed) {
       ship.vy = Math.min(ship.vy, 0);
       ship.vx *= 0.93;
@@ -428,7 +476,7 @@
 
     // Gravity + collision for free cargo
     for (const c of cargos) {
-      if (c.scored || c.stored || c.grabbed) continue;
+      if (c.scored || c.accepting || c.stored || c.grabbed) continue;
       c.vy += CONFIG.gravity * dt;
       c.vx *= 0.995;
       c.vy *= 0.995;
@@ -472,7 +520,7 @@
 
     for (const id of ship.storedCargoIds) {
       const c = cargos.find(k => k.id === id);
-      if (!c || c.scored) continue;
+      if (!c || c.scored || c.accepting) continue;
       const w = worldFromLocal(ship, c.localPos);
       c.x = w.x;
       c.y = w.y;
@@ -489,7 +537,7 @@
         ship.cargoMass = 0;
         ids.forEach((id, i) => {
           const c = cargos.find(k => k.id === id);
-          if (!c || c.scored) return;
+          if (!c || c.scored || c.accepting) return;
           c.stored = false;
           c.grabbed = false;
           c.x = pad.x - 1 + i * 0.55;
@@ -503,11 +551,29 @@
 
     // Score when released cargo rests inside drop zone.
     for (const c of cargos) {
-      if (c.scored || c.stored || c.grabbed) continue;
+      if (c.scored || c.accepting || c.stored || c.grabbed) continue;
       const pad = terrain.pads.find(p => p.kind === 'recycle' && Math.abs(c.x - p.x) < p.w * 0.45 && c.y + c.r > p.y - 0.1);
       if (pad && c.restTimer > 0.45) {
-        c.scored = true;
+        c.accepting = true;
+        c.acceptedTimer = 0.9;
+        c.targetX = pad.x + pad.w * 0.36;
+        c.targetY = pad.y - 0.65;
         game.score += c.points;
+      }
+    }
+
+    for (const c of cargos) {
+      if (!c.accepting || c.scored) continue;
+      c.acceptedTimer -= dt;
+      c.x = lerp(c.x, c.targetX, clamp(7 * dt, 0, 1));
+      c.y = lerp(c.y, c.targetY, clamp(7 * dt, 0, 1));
+      c.angle += 10 * dt;
+      if (c.acceptedTimer <= 0) {
+        c.scored = true;
+        c.accepting = false;
+      }
+      if (Math.random() < 0.35) {
+        game.crunchFx.push({ x: c.targetX + (Math.random() - 0.5) * 0.3, y: c.targetY + (Math.random() - 0.5) * 0.2, life: 0.45 });
       }
     }
   }
@@ -539,6 +605,9 @@
       p.life -= dt * 1.1;
     }
     game.explosions = game.explosions.filter(p => p.life > 0);
+
+    for (const p of game.crunchFx) p.life -= dt;
+    game.crunchFx = game.crunchFx.filter(p => p.life > 0);
   }
 
   function toScreen(wx, wy) {
@@ -593,13 +662,22 @@
 
       const b = toScreen(pad.x + pad.w * 0.35, pad.y - 0.1);
       ctx.fillStyle = '#7f858f';
-      ctx.fillRect(b.x, b.y - 36, 34, 36);
+      ctx.fillRect(b.x, b.y - 42, 40, 42);
 
       ctx.fillStyle = '#121419';
-      ctx.fillRect(b.x + 7, b.y - 28, 20, 12);
+      ctx.fillRect(b.x + 10, b.y - 33, 20, 12);
       ctx.fillStyle = '#d8dee9';
       ctx.font = 'bold 12px Segoe UI';
       if (pad.kind === 'recycle') {
+        ctx.fillStyle = '#6f7782';
+        ctx.fillRect(b.x - 18, b.y - 26, 18, 22);
+        ctx.fillStyle = '#2c3038';
+        ctx.beginPath();
+        ctx.moveTo(b.x - 18, b.y - 26);
+        ctx.lineTo(b.x, b.y - 26);
+        ctx.lineTo(b.x, b.y - 12);
+        ctx.closePath();
+        ctx.fill();
         ctx.fillStyle = '#8affb0';
         ctx.fillRect(left.x + 8, left.y - 22, Math.max(120, right.x - left.x - 16), 18);
         ctx.fillStyle = '#082b15';
@@ -653,9 +731,14 @@
       ctx.stroke();
     }
 
-    // Tray
-    ctx.fillStyle = '#4f5f72';
+    // Tray (same color as hull for visual continuity)
+    ctx.fillStyle = '#d5dbe6';
     ctx.fillRect(shipShape.trayRect.x * m, shipShape.trayRect.y * m, shipShape.trayRect.w * m, shipShape.trayRect.h * m);
+    ctx.strokeStyle = '#18202c';
+    ctx.strokeRect(shipShape.trayRect.x * m, shipShape.trayRect.y * m, shipShape.trayRect.w * m, shipShape.trayRect.h * m);
+    ctx.fillStyle = '#d5dbe6';
+    ctx.fillRect(shipShape.trayRect.x * m, shipShape.trayRect.y * m, 5, shipShape.trayRect.h * m);
+    ctx.fillRect((shipShape.trayRect.x + shipShape.trayRect.w) * m - 5, shipShape.trayRect.y * m, 5, shipShape.trayRect.h * m);
 
     // Hull
     ctx.fillStyle = '#d5dbe6';
@@ -733,6 +816,12 @@
       ctx.arc(s.x, s.y, (1 - p.life) * 16 + 3, 0, Math.PI * 2);
       ctx.fill();
     }
+    for (const p of game.crunchFx) {
+      const s = toScreen(p.x, p.y);
+      ctx.globalAlpha = p.life * 1.4;
+      ctx.fillStyle = '#c8cdd7';
+      ctx.fillRect(s.x - 2, s.y - 2, 4, 4);
+    }
     ctx.globalAlpha = 1;
   }
 
@@ -785,6 +874,17 @@
       ctx.fillText('Respawning...', W / 2 - 65, H / 2 + 16);
     }
 
+    if (game.state === 'READY') {
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 44px Segoe UI';
+      ctx.fillText('SPACE RECYCLE HERO', W / 2 - 250, H / 2 - 28);
+      ctx.font = '22px Segoe UI';
+      ctx.fillStyle = '#9ce8ff';
+      ctx.fillText('Press SPACE to launch mission', W / 2 - 145, H / 2 + 12);
+    }
+
     if (game.showHelp) {
       ctx.fillStyle = 'rgba(0,0,0,0.48)';
       ctx.fillRect(14, H - 168, 470, 150);
@@ -811,7 +911,7 @@
         ship.crashTimer -= dt;
         updateExplosions(dt);
         if (ship.crashTimer <= 0) respawnShip();
-      } else {
+      } else if (game.state === 'PLAYING') {
         updateShip(dt);
         updateCargo(dt);
         updateCamera(dt);
