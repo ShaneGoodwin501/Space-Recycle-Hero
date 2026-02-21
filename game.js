@@ -21,6 +21,7 @@
     landingMaxSpeed: 2.4,
     landingBounceVY: 3.4,
     landingCrashVY: 5.6,
+    landingSettleBounces: 3,
 
     clawRate: 0.7,
     baseRate: 95 * Math.PI / 180,
@@ -171,6 +172,8 @@
 
     grabbedCargo: null,
     storedCargoIds: [],
+    bounceCount: 0,
+    settleLock: false,
   };
 
   function shipMass() {
@@ -284,6 +287,8 @@
     ship.crashTimer = CONFIG.respawnSeconds;
     ship.landed = false;
     ship.grabbedCargo = null;
+    ship.bounceCount = 0;
+    ship.settleLock = false;
 
     for (let i = 0; i < 28; i++) {
       const a = Math.random() * Math.PI * 2;
@@ -329,6 +334,8 @@
     ship.grabbedCargo = null;
     ship.storedCargoIds = [];
     ship.cargoMass = 0;
+    ship.bounceCount = 0;
+    ship.settleLock = false;
     setShipOnGround();
     game.camera.x = ship.x;
     game.camera.y = ship.y - 6;
@@ -403,14 +410,27 @@
     const speedOk = speed < CONFIG.landingMaxSpeed;
 
     const hasSkid = skidLContact || skidRContact;
+    if (!hasSkid) {
+      ship.bounceCount = 0;
+      ship.settleLock = false;
+    }
+
     if (hasSkid && !angleOk) {
       return crashShip('bad-landing');
     }
 
     if (hasSkid && angleOk && Math.abs(ship.vy) > CONFIG.landingMaxVY && Math.abs(ship.vy) <= CONFIG.landingBounceVY) {
-      ship.vy = -Math.abs(ship.vy) * 0.28;
-      ship.vx *= 0.84;
-      ship.av *= 0.7;
+      if (ship.bounceCount < CONFIG.landingSettleBounces) {
+        ship.vy = -Math.abs(ship.vy) * (0.24 - ship.bounceCount * 0.05);
+        ship.vx *= 0.84;
+        ship.av *= 0.72;
+        ship.bounceCount += 1;
+      } else {
+        ship.settleLock = true;
+        ship.vy = 0;
+        ship.vx *= 0.6;
+        ship.av *= 0.45;
+      }
     }
 
     if (hasSkid && Math.abs(ship.vy) > CONFIG.landingCrashVY) return crashShip('hard-impact');
@@ -425,9 +445,11 @@
     }
     if (hullHitTerrain && !hasSkid) return crashShip('hull-terrain');
 
-    ship.landed = hasSkid && angleOk && speedOk && verticalOk;
+    ship.landed = hasSkid && angleOk && speedOk && (verticalOk || ship.settleLock);
     if (ship.landed) {
       ship.vy = Math.min(ship.vy, 0);
+      ship.bounceCount = 0;
+      ship.settleLock = true;
       ship.vx *= 0.93;
       ship.av *= 0.85;
       const ground = Math.min(terrainY(skidL.x) - shipShape.skidL.y, terrainY(skidR.x) - shipShape.skidR.y);
@@ -836,25 +858,39 @@
     ctx.lineTo(p2.x * m, p2.y * m);
     ctx.stroke();
 
-    // Claw (dual triangular fingers, ratchet open/close variable)
-    const open = lerp(0.05, 0.52, ship.clawOpen);
-    const tip = { x: p2.x + Math.cos(a2) * 0.28, y: p2.y + Math.sin(a2) * 0.28 };
+    // Claw (single-color white, fully connected to arm by a rectangular coupler)
+    const open = lerp(0.03, 0.42, ship.clawOpen);
+    const tip = { x: p2.x + Math.cos(a2) * 0.26, y: p2.y + Math.sin(a2) * 0.26 };
     const n = { x: Math.cos(a2 + Math.PI / 2), y: Math.sin(a2 + Math.PI / 2) };
     const forward = { x: Math.cos(a2), y: Math.sin(a2) };
 
+    // Rectangular connector to remove visual gap from arm to claw fingers.
+    const couplerLen = 0.22;
+    const couplerHalfW = 0.08;
+    const c0 = { x: p2.x - n.x * couplerHalfW, y: p2.y - n.y * couplerHalfW };
+    const c1 = { x: p2.x + n.x * couplerHalfW, y: p2.y + n.y * couplerHalfW };
+    const c2 = { x: p2.x + forward.x * couplerLen + n.x * couplerHalfW, y: p2.y + forward.y * couplerLen + n.y * couplerHalfW };
+    const c3 = { x: p2.x + forward.x * couplerLen - n.x * couplerHalfW, y: p2.y + forward.y * couplerLen - n.y * couplerHalfW };
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(c0.x * m, c0.y * m);
+    ctx.lineTo(c1.x * m, c1.y * m);
+    ctx.lineTo(c2.x * m, c2.y * m);
+    ctx.lineTo(c3.x * m, c3.y * m);
+    ctx.closePath();
+    ctx.fill();
+
     function drawFinger(sign) {
-      const baseP = { x: tip.x + n.x * open * sign, y: tip.y + n.y * open * sign };
-      const pA = { x: baseP.x + forward.x * 0.2, y: baseP.y + forward.y * 0.2 };
-      const pB = { x: baseP.x + n.x * 0.1 * sign, y: baseP.y + n.y * 0.1 * sign };
+      const root = { x: tip.x + n.x * open * sign, y: tip.y + n.y * open * sign };
+      const pA = { x: root.x + forward.x * 0.22, y: root.y + forward.y * 0.22 };
+      const pB = { x: root.x + n.x * 0.12 * sign, y: root.y + n.y * 0.12 * sign };
       ctx.fillStyle = '#ffffff';
       ctx.beginPath();
-      ctx.moveTo(baseP.x * m, baseP.y * m);
+      ctx.moveTo(root.x * m, root.y * m);
       ctx.lineTo(pA.x * m, pA.y * m);
       ctx.lineTo(pB.x * m, pB.y * m);
       ctx.closePath();
       ctx.fill();
-      ctx.strokeStyle = '#ffffff';
-      ctx.stroke();
     }
     drawFinger(1);
     drawFinger(-1);
