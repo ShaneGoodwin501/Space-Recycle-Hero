@@ -37,6 +37,7 @@
     respawnSeconds: 2,
 
     cargoCount: 51,
+    consoleHeightPx: 150,
   };
 
   const canvas = document.getElementById('gameCanvas');
@@ -258,6 +259,7 @@
     camera: { x: ship.x, y: ship.y - 6 },
     explosions: [],
     crunchFx: [],
+    audio: null,
   };
 
 
@@ -293,6 +295,7 @@
     game.camera.y = ship.y - 6;
     game.state = 'PLAYING';
     game.showHelp = false;
+    initAudio();
   }
 
   function setShipOnGround() {
@@ -305,6 +308,114 @@
     ship.vy = 0;
     ship.av = 0;
     ship.landed = true;
+  }
+
+
+  function distanceToGroundMeters() {
+    const skidL = worldFromLocal(ship, shipShape.skidL);
+    const skidR = worldFromLocal(ship, shipShape.skidR);
+    const dL = terrainY(skidL.x) - skidL.y;
+    const dR = terrainY(skidR.x) - skidR.y;
+    return Math.max(0, Math.min(dL, dR));
+  }
+
+  function initAudio() {
+    if (game.audio) return;
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    const ctxA = new Ctx();
+
+    const master = ctxA.createGain();
+    master.gain.value = 0.14;
+    master.connect(ctxA.destination);
+
+    const musicGain = ctxA.createGain();
+    musicGain.gain.value = 0.02;
+    musicGain.connect(master);
+
+    const musicA = ctxA.createOscillator();
+    musicA.type = 'triangle';
+    musicA.frequency.value = 220;
+    musicA.connect(musicGain);
+    musicA.start();
+
+    const musicB = ctxA.createOscillator();
+    musicB.type = 'sine';
+    musicB.frequency.value = 330;
+    const musicBGain = ctxA.createGain();
+    musicBGain.gain.value = 0.01;
+    musicB.connect(musicBGain);
+    musicBGain.connect(master);
+    musicB.start();
+
+    const rumbleGain = ctxA.createGain();
+    rumbleGain.gain.value = 0;
+    const rumbleLP = ctxA.createBiquadFilter();
+    rumbleLP.type = 'lowpass';
+    rumbleLP.frequency.value = 110;
+    rumbleLP.Q.value = 0.9;
+    const rumble = ctxA.createOscillator();
+    rumble.type = 'sawtooth';
+    rumble.frequency.value = 52;
+    rumble.connect(rumbleLP);
+    rumbleLP.connect(rumbleGain);
+    rumbleGain.connect(master);
+    rumble.start();
+
+    const hydroGain = ctxA.createGain();
+    hydroGain.gain.value = 0;
+    const hydro = ctxA.createOscillator();
+    hydro.type = 'square';
+    hydro.frequency.value = 90;
+    hydro.connect(hydroGain);
+    hydroGain.connect(master);
+    hydro.start();
+
+    game.audio = {
+      ctx: ctxA,
+      master,
+      musicA,
+      musicB,
+      rumble,
+      rumbleGain,
+      hydro,
+      hydroGain,
+      noteIndex: 0,
+      nextNoteTime: 0,
+      seq: [220, 277.18, 329.63, 440, 329.63, 277.18, 246.94, 329.63],
+    };
+  }
+
+  function updateAudio() {
+    const a = game.audio;
+    if (!a) return;
+    const t = a.ctx.currentTime;
+
+    if (a.ctx.state === 'suspended' && game.state === 'PLAYING') a.ctx.resume();
+
+    while (a.nextNoteTime < t + 0.02) {
+      const f = a.seq[a.noteIndex % a.seq.length];
+      a.musicA.frequency.setTargetAtTime(f, a.nextNoteTime, 0.03);
+      a.musicB.frequency.setTargetAtTime(f * 1.5, a.nextNoteTime, 0.03);
+      a.noteIndex += 1;
+      a.nextNoteTime += 0.24;
+    }
+
+    const playing = game.state === 'PLAYING' && !game.paused;
+    const armMoving = keys.has('Numpad8') || keys.has('Digit8') || keys.has('Numpad2') || keys.has('Digit2') ||
+      keys.has('Numpad7') || keys.has('Digit7') || keys.has('Numpad1') || keys.has('Digit1') ||
+      keys.has('Numpad4') || keys.has('Digit4') || keys.has('Numpad6') || keys.has('Digit6') ||
+      keys.has('Numpad9') || keys.has('Digit9') || keys.has('Numpad3') || keys.has('Digit3');
+
+    const targetRumble = playing ? Math.max(0, ship.throttle) * 0.035 : 0;
+    a.rumbleGain.gain.setTargetAtTime(targetRumble, t, 0.07);
+    a.rumble.frequency.setTargetAtTime(45 + ship.throttle * 28, t, 0.08);
+
+    const targetHydro = (playing && armMoving) ? 0.012 : 0;
+    a.hydroGain.gain.setTargetAtTime(targetHydro, t, 0.03);
+    a.hydro.frequency.setTargetAtTime(78 + Math.sin(t * 20) * 12, t, 0.04);
+
+    a.master.gain.setTargetAtTime(playing ? 0.14 : 0.08, t, 0.1);
   }
 
   randomizeWorld();
@@ -608,8 +719,10 @@
           c.stored = true;
           c.localPos = { x: clamp(local.x, tr.x + c.r, tr.x + tr.w - c.r), y: clamp(local.y, tr.y + c.r, tr.y + tr.h - c.r) };
           ship.grabbedCargo = null;
-          ship.storedCargoIds.push(c.id);
-          ship.cargoMass += c.mass;
+          if (!ship.storedCargoIds.includes(c.id)) {
+            ship.storedCargoIds.push(c.id);
+            ship.cargoMass += c.mass;
+          }
         }
       }
     }
@@ -994,6 +1107,82 @@
     ctx.globalAlpha = 1;
   }
 
+
+
+  function drawBottomConsole() {
+    const h = Math.min(CONFIG.consoleHeightPx, Math.floor(H * 0.28));
+    const y = H - h;
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(0, y, W, h);
+    ctx.strokeStyle = '#303030';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, y + 1);
+    ctx.lineTo(W, y + 1);
+    ctx.stroke();
+
+    const pad = 16;
+    const panelH = h - 24;
+    const panelY = y + 12;
+
+    function drawBar(x, w, label, value, unit = '%') {
+      ctx.fillStyle = '#000';
+      ctx.fillRect(x, panelY, w, panelH);
+      ctx.strokeStyle = '#0b5';
+      ctx.strokeRect(x, panelY, w, panelH);
+      ctx.fillStyle = '#0f7d3a';
+      const fillW = Math.max(0, Math.min(1, value)) * (w - 18);
+      ctx.fillRect(x + 9, panelY + panelH * 0.55, fillW, panelH * 0.28);
+      ctx.fillStyle = '#7dff9c';
+      ctx.font = 'bold 14px Segoe UI';
+      ctx.fillText(label, x + 10, panelY + 20);
+      ctx.font = 'bold 18px Consolas, monospace';
+      ctx.fillText(`${Math.round(value * 100)}${unit}`, x + 10, panelY + 44);
+    }
+
+    const barW = Math.max(170, W * 0.18);
+    drawBar(pad, barW, 'THROTTLE', ship.throttle);
+    drawBar(pad + barW + 14, barW, 'FUEL', ship.fuel / 100);
+
+    const gaugeSize = Math.min(panelH - 10, 110);
+    const gx = pad + barW * 2 + 38;
+    const gy = panelY + panelH / 2;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(gx - gaugeSize / 2 - 16, panelY, gaugeSize + 32, panelH);
+    ctx.strokeStyle = '#0b5';
+    ctx.strokeRect(gx - gaugeSize / 2 - 16, panelY, gaugeSize + 32, panelH);
+    ctx.strokeStyle = '#7dff9c';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(gx, gy, gaugeSize * 0.37, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.save();
+    ctx.translate(gx, gy);
+    ctx.rotate(ship.angle);
+    ctx.strokeStyle = '#7dff9c';
+    ctx.beginPath();
+    ctx.moveTo(-gaugeSize * 0.28, 0);
+    ctx.lineTo(gaugeSize * 0.28, 0);
+    ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = '#7dff9c';
+    ctx.font = 'bold 13px Segoe UI';
+    ctx.fillText('ATTITUDE', gx - 30, panelY + 18);
+
+    const dX = gx + gaugeSize / 2 + 36;
+    const dW = Math.max(200, W - dX - pad);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(dX, panelY, dW, panelH);
+    ctx.strokeStyle = '#0b5';
+    ctx.strokeRect(dX, panelY, dW, panelH);
+    const dist = distanceToGroundMeters();
+    ctx.fillStyle = '#7dff9c';
+    ctx.font = 'bold 15px Segoe UI';
+    ctx.fillText('DISTANCE TO GROUND', dX + 12, panelY + 22);
+    ctx.font = 'bold 44px "Consolas", monospace';
+    ctx.fillText(`${dist.toFixed(1)} m`, dX + 12, panelY + panelH * 0.72);
+  }
+
   function drawHUD() {
     ctx.fillStyle = '#dce7ff';
     ctx.font = 'bold 24px Segoe UI';
@@ -1008,21 +1197,6 @@
       ctx.fillText('LANDED', 20, 102);
     }
 
-    // Fuel gauge on right
-    const gx = W - 52;
-    const gy = 90;
-    const gh = Math.min(320, H * 0.55);
-    ctx.fillStyle = '#101522';
-    ctx.fillRect(gx, gy, 24, gh);
-    ctx.strokeStyle = '#8eb8ff';
-    ctx.strokeRect(gx, gy, 24, gh);
-    const fill = gh * (ship.fuel / 100);
-    ctx.fillStyle = ship.fuel < 20 ? '#ff5f5f' : '#73ffd9';
-    ctx.fillRect(gx + 2, gy + gh - fill + 2, 20, fill - 4);
-    ctx.fillStyle = '#dce7ff';
-    ctx.font = '15px Segoe UI';
-    ctx.fillText('FUEL', gx - 8, gy - 10);
-    ctx.fillText(`${Math.round(ship.fuel)}%`, gx - 12, gy + gh + 20);
 
     if (game.paused) {
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
@@ -1053,6 +1227,8 @@
       ctx.fillStyle = '#9ce8ff';
       ctx.fillText('Press SPACE to launch mission', W / 2 - 145, H / 2 + 12);
     }
+
+    drawBottomConsole();
 
     if (game.showHelp) {
       ctx.fillStyle = 'rgba(0,0,0,0.48)';
@@ -1086,6 +1262,7 @@
         updateCamera(dt);
       }
       updateExplosions(dt);
+      updateAudio();
     }
 
     drawBackground();
