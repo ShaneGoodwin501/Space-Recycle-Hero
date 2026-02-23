@@ -30,7 +30,8 @@
 
     worldWidth: 260,
     terrainStep: 2,
-    starCount: 240,
+    starCount: 408,
+    planetCount: 8,
 
     cameraSmooth: 4,
 
@@ -144,13 +145,24 @@
 
   let terrain = generateTerrain();
   let stars = [];
+  let planets = [];
 
   function regenerateStars() {
     stars = Array.from({ length: CONFIG.starCount }, () => ({
       x: Math.random() * CONFIG.worldWidth,
-      y: Math.random() * 45,
-      r: Math.random() * 1.7 + 0.2,
-      a: Math.random() * 0.7 + 0.2,
+      y: Math.random() * 85 - 18,
+      r: Math.random() * 1.8 + 0.2,
+      a: Math.random() * 0.72 + 0.18,
+    }));
+
+    const palette = ['#5f7cff', '#d39bff', '#ffd38a', '#8de4ff', '#9ad2ff'];
+    planets = Array.from({ length: CONFIG.planetCount }, () => ({
+      x: Math.random() * CONFIG.worldWidth,
+      y: Math.random() * 68 - 14,
+      r: Math.random() * 12 + 6,
+      color: palette[Math.floor(Math.random() * palette.length)],
+      alpha: Math.random() * 0.24 + 0.2,
+      phase: Math.random() * Math.PI * 2,
     }));
   }
   regenerateStars();
@@ -931,9 +943,32 @@
     ctx.fillStyle = '#02030b';
     ctx.fillRect(0, 0, W, H);
 
+    for (const p of planets) {
+      const px = (p.x - game.camera.x * 0.08) * CONFIG.METER_TO_PX + W / 2;
+      const py = (p.y - game.camera.y * 0.03) * CONFIG.METER_TO_PX + H * 0.2;
+      if (px < -p.r - 8 || px > W + p.r + 8 || py < -p.r - 8 || py > H + p.r + 8) continue;
+
+      ctx.globalAlpha = p.alpha;
+      const grad = ctx.createRadialGradient(px - p.r * 0.35, py - p.r * 0.35, p.r * 0.2, px, py, p.r);
+      grad.addColorStop(0, '#ffffff');
+      grad.addColorStop(0.25, p.color);
+      grad.addColorStop(1, '#141a2e');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(px, py, p.r, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.globalAlpha = p.alpha * 0.45;
+      ctx.strokeStyle = '#e6f0ff';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(px, py, p.r * 1.28, p.phase, p.phase + Math.PI * 1.2);
+      ctx.stroke();
+    }
+
     for (const s of stars) {
       const parallaxX = (s.x - game.camera.x * 0.12) * CONFIG.METER_TO_PX + W / 2;
-      const parallaxY = (s.y - game.camera.y * 0.05) * CONFIG.METER_TO_PX * 0.25 + 40;
+      const parallaxY = (s.y - game.camera.y * 0.05) * CONFIG.METER_TO_PX + H * 0.18;
       if (parallaxX < -4 || parallaxX > W + 4 || parallaxY < -4 || parallaxY > H + 4) continue;
       ctx.globalAlpha = s.a;
       ctx.fillStyle = '#fff';
