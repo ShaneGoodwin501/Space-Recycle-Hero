@@ -61,9 +61,15 @@
 
   const keys = new Set();
   const blocked = new Set(['KeyW','KeyA','KeyS','KeyD','Numpad1','Numpad2','Numpad3','Numpad4','Numpad6','Numpad7','Numpad8','Numpad9','Digit1','Digit2','Digit3','Digit4','Digit6','Digit7','Digit8','Digit9','Space','Escape','KeyH']);
+  function unlockAudioFromUserGesture() {
+    initAudio();
+    if (game.audio?.ctx && game.audio.ctx.state !== 'running') game.audio.ctx.resume();
+  }
+
   window.addEventListener('keydown', (e) => {
     if (blocked.has(e.code)) e.preventDefault();
     keys.add(e.code);
+    unlockAudioFromUserGesture();
     if (e.code === 'Space') {
       if (game.state === 'READY') startMission();
       else if (game.state === 'PLAYING') ship.trayExtended = !ship.trayExtended;
@@ -71,6 +77,7 @@
     if (e.code === 'KeyH') game.showHelp = !game.showHelp;
     if (e.code === 'Escape' && game.state !== 'CRASHED' && game.state !== 'READY') game.paused = !game.paused;
   }, { passive: false });
+  window.addEventListener('pointerdown', unlockAudioFromUserGesture, { passive: true });
   window.addEventListener('keyup', (e) => {
     if (blocked.has(e.code)) e.preventDefault();
     keys.delete(e.code);
@@ -349,11 +356,11 @@
     const ctxA = new Ctx();
 
     const master = ctxA.createGain();
-    master.gain.value = 0.14;
+    master.gain.value = 0.2;
     master.connect(ctxA.destination);
 
     const musicGain = ctxA.createGain();
-    musicGain.gain.value = 0.02;
+    musicGain.gain.value = 0.04;
     musicGain.connect(master);
 
     const musicA = ctxA.createOscillator();
@@ -366,7 +373,7 @@
     musicB.type = 'sine';
     musicB.frequency.value = 330;
     const musicBGain = ctxA.createGain();
-    musicBGain.gain.value = 0.01;
+    musicBGain.gain.value = 0.024;
     musicB.connect(musicBGain);
     musicBGain.connect(master);
     musicB.start();
@@ -404,7 +411,7 @@
       hydro,
       hydroGain,
       noteIndex: 0,
-      nextNoteTime: 0,
+      nextNoteTime: ctxA.currentTime,
       seq: [220, 277.18, 329.63, 440, 329.63, 277.18, 246.94, 329.63],
     };
   }
@@ -430,15 +437,15 @@
       keys.has('Numpad4') || keys.has('Digit4') || keys.has('Numpad6') || keys.has('Digit6') ||
       keys.has('Numpad9') || keys.has('Digit9') || keys.has('Numpad3') || keys.has('Digit3');
 
-    const targetRumble = playing ? Math.max(0, ship.throttle) * 0.035 : 0;
+    const targetRumble = playing ? Math.max(0, ship.throttle) * 0.06 : 0;
     a.rumbleGain.gain.setTargetAtTime(targetRumble, t, 0.07);
     a.rumble.frequency.setTargetAtTime(45 + ship.throttle * 28, t, 0.08);
 
-    const targetHydro = (playing && armMoving) ? 0.012 : 0;
+    const targetHydro = (playing && armMoving) ? 0.022 : 0;
     a.hydroGain.gain.setTargetAtTime(targetHydro, t, 0.03);
     a.hydro.frequency.setTargetAtTime(78 + Math.sin(t * 20) * 12, t, 0.04);
 
-    a.master.gain.setTargetAtTime(playing ? 0.14 : 0.08, t, 0.1);
+    a.master.gain.setTargetAtTime(playing ? 0.2 : 0.1, t, 0.1);
   }
 
   randomizeWorld();
