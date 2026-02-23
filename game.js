@@ -358,24 +358,15 @@
     master.gain.value = 0.24;
     master.connect(ctxA.destination);
 
-    const melodyGain = ctxA.createGain();
-    melodyGain.gain.value = 0.05;
-    melodyGain.connect(master);
-
-    const melodyLead = ctxA.createOscillator();
-    melodyLead.type = 'sawtooth';
-    melodyLead.frequency.value = 329.63;
-    melodyLead.connect(melodyGain);
-    melodyLead.start();
-
-    const harmonyGain = ctxA.createGain();
-    harmonyGain.gain.value = 0.03;
-    harmonyGain.connect(master);
-    const melodyHarmony = ctxA.createOscillator();
-    melodyHarmony.type = 'sine';
-    melodyHarmony.frequency.value = 330;
-    melodyHarmony.connect(harmonyGain);
-    melodyHarmony.start();
+    // No melody layer (copyright-safe); keep original drum/bass groove only.
+    const bassGain = ctxA.createGain();
+    bassGain.gain.value = 0.028;
+    bassGain.connect(master);
+    const bass = ctxA.createOscillator();
+    bass.type = 'square';
+    bass.frequency.value = 98;
+    bass.connect(bassGain);
+    bass.start();
 
     const rumbleGain = ctxA.createGain();
     rumbleGain.gain.value = 0;
@@ -453,28 +444,16 @@
     game.audio = {
       ctx: ctxA,
       master,
-      melodyLead,
-      melodyHarmony,
+      bass,
+      bassGain,
       rumble,
       rumbleGain,
       rocketTone,
       rocketToneGain,
       hydro,
       hydroGain,
-      noteIndex: 0,
-      nextNoteTime: ctxA.currentTime,
       beatStep: 0,
       nextBeatTime: ctxA.currentTime,
-      phraseStep: 0,
-      currentPhrase: 0,
-      transpose: 1,
-      variationGate: 0,
-      seqs: [
-        [329.63, 392, 440, 493.88, 523.25, 659.25, 587.33, 523.25],
-        [392, 440, 493.88, 587.33, 523.25, 493.88, 440, 392],
-        [329.63, 369.99, 440, 554.37, 493.88, 440, 415.3, 369.99],
-        [261.63, 329.63, 392, 440, 493.88, 523.25, 587.33, 659.25],
-      ],
       triggerKick,
       triggerSnare,
     };
@@ -489,27 +468,6 @@
 
     const playing = game.state === 'PLAYING' && !game.paused;
 
-    while (a.nextNoteTime < t + 0.03) {
-      const seq = a.seqs[a.currentPhrase % a.seqs.length];
-      const i = a.noteIndex % seq.length;
-      const f = seq[i] * a.transpose;
-      const swing = (i % 2 === 0) ? 0.19 : 0.215;
-      a.melodyLead.frequency.setTargetAtTime(f, a.nextNoteTime, 0.018);
-      a.melodyHarmony.frequency.setTargetAtTime(f * (1.25 + ((a.currentPhrase % 3) * 0.07)), a.nextNoteTime, 0.02);
-
-      a.noteIndex += 1;
-      a.phraseStep += 1;
-      a.nextNoteTime += swing;
-
-      // Every phrase, rotate patterns and transpose lightly to reduce repetition.
-      if (a.phraseStep % seq.length === 0) {
-        a.currentPhrase = (a.currentPhrase + 1) % a.seqs.length;
-        const transposes = [1, 1, 1.05946, 0.94387];
-        a.transpose = transposes[(a.currentPhrase + a.variationGate) % transposes.length];
-        a.variationGate = (a.variationGate + 1) % 7;
-      }
-    }
-
     while (a.nextBeatTime < t + 0.03) {
       const step = a.beatStep % 16;
       const bar = Math.floor(a.beatStep / 16) % 8;
@@ -519,10 +477,17 @@
       a.nextBeatTime += 0.12;
     }
 
+    const grooveStep = a.beatStep % 8;
+    const bassFreqs = [98, 98, 110, 98, 123.47, 110, 98, 92.5];
+    a.bass.frequency.setTargetAtTime(bassFreqs[grooveStep], t, 0.03);
+
     const armMoving = keys.has('Numpad8') || keys.has('Digit8') || keys.has('Numpad2') || keys.has('Digit2') ||
       keys.has('Numpad7') || keys.has('Digit7') || keys.has('Numpad1') || keys.has('Digit1') ||
       keys.has('Numpad4') || keys.has('Digit4') || keys.has('Numpad6') || keys.has('Digit6') ||
       keys.has('Numpad9') || keys.has('Digit9') || keys.has('Numpad3') || keys.has('Digit3');
+
+    const targetBass = playing ? 0.028 : 0;
+    a.bassGain.gain.setTargetAtTime(targetBass, t, 0.08);
 
     const targetRumble = playing ? Math.max(0, ship.throttle) * 0.08 : 0;
     a.rumbleGain.gain.setTargetAtTime(targetRumble, t, 0.05);
@@ -679,6 +644,20 @@
     ship.y += ship.vy * dt;
 
     ship.x = clamp(ship.x, 0.8, CONFIG.worldWidth - 0.8);
+    if (ship.x <= 0.81 || ship.x >= CONFIG.worldWidth - 0.81) ship.vx = 0;
+
+    // Stop at altitude/world edges to prevent off-screen glitch behavior.
+    const tm = terrainMetrics();
+    const topStop = tm.minY - tm.height * 2.2;
+    const bottomStop = tm.maxY + 1.5;
+    if (ship.y < topStop) {
+      ship.y = topStop;
+      if (ship.vy < 0) ship.vy = 0;
+    }
+    if (ship.y > bottomStop) {
+      ship.y = bottomStop;
+      if (ship.vy > 0) ship.vy = 0;
+    }
 
     const skidL = worldFromLocal(ship, shipShape.skidL);
     const skidR = worldFromLocal(ship, shipShape.skidR);
