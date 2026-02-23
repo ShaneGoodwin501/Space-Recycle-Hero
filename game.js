@@ -1115,12 +1115,13 @@
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // Centered recycle logo on hull
+    // Centered recycle logo on hull (stacked to fit ship width)
     ctx.fillStyle = '#1f8f3a';
-    ctx.font = `bold ${Math.max(12, m * 0.24)}px monospace`;
+    ctx.font = `bold ${Math.max(10, m * 0.2)}px monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('Recycle Hero', 0, -0.08 * m);
+    ctx.fillText('Recycle', 0, -0.16 * m);
+    ctx.fillText('Hero', 0, 0.02 * m);
 
     // Skids (safe landing colliders)
     ctx.strokeStyle = '#73ffcf';
@@ -1271,17 +1272,31 @@
     ctx.fillText('ATTITUDE', gx - 30, panelY + 18);
 
     const dX = gx + gaugeSize / 2 + 36;
-    const dW = Math.max(200, W - dX - pad);
+    const totalW = Math.max(280, W - dX - pad);
+    const scoreW = Math.min(220, Math.max(150, totalW * 0.3));
+    const distW = totalW - scoreW - 12;
+
     ctx.fillStyle = '#000';
-    ctx.fillRect(dX, panelY, dW, panelH);
+    ctx.fillRect(dX, panelY, distW, panelH);
     ctx.strokeStyle = '#0b5';
-    ctx.strokeRect(dX, panelY, dW, panelH);
+    ctx.strokeRect(dX, panelY, distW, panelH);
     const dist = distanceToGroundMeters();
     ctx.fillStyle = '#7dff9c';
     ctx.font = 'bold 15px Segoe UI';
     ctx.fillText('DISTANCE TO GROUND', dX + 12, panelY + 22);
     ctx.font = 'bold 44px "Consolas", monospace';
     ctx.fillText(`${dist.toFixed(1)} m`, dX + 12, panelY + panelH * 0.72);
+
+    const scoreX = dX + distW + 12;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(scoreX, panelY, scoreW, panelH);
+    ctx.strokeStyle = '#0b5';
+    ctx.strokeRect(scoreX, panelY, scoreW, panelH);
+    ctx.fillStyle = '#7dff9c';
+    ctx.font = 'bold 15px Segoe UI';
+    ctx.fillText('SCORE', scoreX + 12, panelY + 22);
+    ctx.font = 'bold 46px "Consolas", monospace';
+    ctx.fillText(`${game.score}`, scoreX + 12, panelY + panelH * 0.74);
   }
 
 
@@ -1331,24 +1346,6 @@
   }
 
   function drawHUD() {
-    ctx.fillStyle = '#dce7ff';
-    ctx.font = 'bold 24px Segoe UI';
-    ctx.fillText(`Score: ${game.score}`, 20, 34);
-
-    ctx.font = '16px Segoe UI';
-    ctx.fillText(`Throttle: ${Math.round(ship.throttle * 100)}%`, 20, 58);
-    ctx.fillText(`Mass: ${shipMass().toFixed(2)} t`, 20, 80);
-
-    if (ship.landed && game.state === 'PLAYING') {
-      ctx.fillStyle = '#7dffad';
-      ctx.fillText('LANDED', 20, 102);
-    }
-    if (ship.invincibleTimer > 0.01) {
-      ctx.fillStyle = '#9cffb8';
-      ctx.fillText('INVINCIBLE', 20, 124);
-    }
-
-
     if (game.paused) {
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
       ctx.fillRect(0, 0, W, H);
