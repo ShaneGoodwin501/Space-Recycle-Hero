@@ -363,13 +363,13 @@
     melodyGain.connect(master);
 
     const melodyLead = ctxA.createOscillator();
-    melodyLead.type = 'triangle';
-    melodyLead.frequency.value = 220;
+    melodyLead.type = 'sawtooth';
+    melodyLead.frequency.value = 329.63;
     melodyLead.connect(melodyGain);
     melodyLead.start();
 
     const harmonyGain = ctxA.createGain();
-    harmonyGain.gain.value = 0.035;
+    harmonyGain.gain.value = 0.03;
     harmonyGain.connect(master);
     const melodyHarmony = ctxA.createOscillator();
     melodyHarmony.type = 'sine';
@@ -465,7 +465,7 @@
       nextNoteTime: ctxA.currentTime,
       beatStep: 0,
       nextBeatTime: ctxA.currentTime,
-      seq: [220, 246.94, 293.66, 329.63, 392, 329.63, 293.66, 261.63],
+      seq: [329.63, 392, 440, 493.88, 523.25, 659.25, 587.33, 523.25],
       triggerKick,
       triggerSnare,
     };
@@ -485,7 +485,7 @@
       a.melodyLead.frequency.setTargetAtTime(f, a.nextNoteTime, 0.02);
       a.melodyHarmony.frequency.setTargetAtTime(f * 1.5, a.nextNoteTime, 0.02);
       a.noteIndex += 1;
-      a.nextNoteTime += 0.24;
+      a.nextNoteTime += 0.2;
     }
 
     while (a.nextBeatTime < t + 0.03) {
@@ -509,9 +509,9 @@
     a.rocketToneGain.gain.setTargetAtTime(targetRocketTone, t, 0.04);
     a.rocketTone.frequency.setTargetAtTime(95 + ship.throttle * 120, t, 0.05);
 
-    const targetHydro = (playing && armMoving) ? 0.03 : 0;
+    const targetHydro = (playing && armMoving) ? 0.055 : 0;
     a.hydroGain.gain.setTargetAtTime(targetHydro, t, 0.02);
-    a.hydro.frequency.setTargetAtTime(140 + Math.abs(Math.sin(t * 15)) * 90, t, 0.02);
+    a.hydro.frequency.setTargetAtTime(180 + Math.abs(Math.sin(t * 18)) * 180, t, 0.015);
 
     a.master.gain.setTargetAtTime(playing ? 0.24 : 0.1, t, 0.08);
   }
@@ -735,7 +735,7 @@
   function updateCargo(dt) {
     const arm = getArmKinematics();
 
-    if (ship.grabbedCargo && ship.traySlide > 0.55) {
+    if (ship.grabbedCargo) {
       const c = cargos.find(k => k.id === ship.grabbedCargo);
       if (c) {
         c.grabbed = true;
