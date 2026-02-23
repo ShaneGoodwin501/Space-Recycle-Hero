@@ -187,6 +187,7 @@
     storedCargoIds: [],
     bounceCount: 0,
     settleLock: false,
+    invincibleTimer: 0,
   };
 
   function shipMass() {
@@ -246,6 +247,9 @@
         targetY: 0,
         restTimer: 0,
         localPos: { x: 0, y: 0 },
+        popDelay: 0,
+        popping: false,
+        ignoreTrayTimer: 0,
       });
     }
   }
@@ -284,6 +288,7 @@
     ship.clawOpen = 1;
     ship.bounceCount = 0;
     ship.settleLock = false;
+    ship.invincibleTimer = 0;
     ship.angle = 0;
     ship.av = 0;
     randomizeWorld();
@@ -496,6 +501,7 @@
     ship.cargoMass = 0;
     ship.bounceCount = 0;
     ship.settleLock = false;
+    ship.invincibleTimer = 0;
     setShipOnGround();
     game.camera.x = ship.x;
     game.camera.y = ship.y - 6;
@@ -525,6 +531,7 @@
   }
 
   function updateShip(dt) {
+    ship.invincibleTimer = Math.max(0, ship.invincibleTimer - dt);
     const mass = shipMass();
 
     const flying = !ship.landed || ship.throttle > 0.02 || Math.hypot(ship.vx, ship.vy) > 0.4;
@@ -557,10 +564,12 @@
     const skidR = worldFromLocal(ship, shipShape.skidR);
     const hullCenter = { x: ship.x, y: ship.y };
 
-    for (const c of cargos) {
-      if (c.scored || c.accepting || c.stored || c.grabbed) continue;
-      if (Math.hypot(c.x - hullCenter.x, c.y - hullCenter.y) < c.r + shipShape.hullRadius * 0.8) {
-        return crashShip('hull-cargo');
+    if (ship.invincibleTimer <= 0) {
+      for (const c of cargos) {
+        if (c.scored || c.accepting || c.stored || c.grabbed || c.popping) continue;
+        if (Math.hypot(c.x - hullCenter.x, c.y - hullCenter.y) < c.r + shipShape.hullRadius * 0.8) {
+          return crashShip('hull-cargo');
+        }
       }
     }
 
@@ -664,9 +673,32 @@
       }
     }
 
+    // Popcorn ejection behavior for recycle unloading from tray back.
+    const shipBackDir = rotate({ x: -1, y: 0 }, ship.angle);
+    const shipUpDir = rotate({ x: 0, y: -1 }, ship.angle);
+    for (const c of cargos) {
+      if (c.ignoreTrayTimer > 0) c.ignoreTrayTimer = Math.max(0, c.ignoreTrayTimer - dt);
+      if (!c.popping) continue;
+      c.popDelay -= dt;
+      if (c.popDelay <= 0) {
+        c.popping = false;
+        const burst = 2.0 + Math.random() * 2.2;
+        const backKick = 1.3 + Math.random() * 1.6;
+        const lateral = (Math.random() - 0.5) * 1.0;
+        c.vx = ship.vx + shipBackDir.x * backKick + shipUpDir.x * burst + lateral;
+        c.vy = ship.vy + shipBackDir.y * backKick + shipUpDir.y * burst - Math.random() * 0.2;
+      } else {
+        const backLip = worldFromLocal(ship, { x: shipShape.trayRect.x - 0.15, y: shipShape.trayRect.y + shipShape.trayRect.h * 0.55 });
+        c.x = backLip.x;
+        c.y = backLip.y;
+        c.vx = ship.vx;
+        c.vy = ship.vy;
+      }
+    }
+
     // Gravity + collision for free cargo
     for (const c of cargos) {
-      if (c.scored || c.accepting || c.stored || c.grabbed) continue;
+      if (c.scored || c.accepting || c.stored || c.grabbed || c.popping) continue;
       c.vy += CONFIG.gravity * dt;
       c.vx *= 0.995;
       c.vy *= 0.995;
@@ -691,7 +723,7 @@
 
     // Tray catch: dropped/free cargo that enters tray bounds is caught and stored.
     for (const c of cargos) {
-      if (c.scored || c.accepting || c.stored || c.grabbed) continue;
+      if (c.scored || c.accepting || c.stored || c.grabbed || c.popping || c.ignoreTrayTimer > 0) continue;
       const local = rotate({ x: c.x - ship.x, y: c.y - ship.y }, -ship.angle);
       const tr = shipShape.trayRect;
       const inTray = local.x > tr.x + c.r && local.x < tr.x + tr.w - c.r && local.y > tr.y + c.r && local.y < tr.y + tr.h - c.r;
@@ -737,23 +769,28 @@
       c.vy = ship.vy;
     }
 
-    // Delivery: when safely landed on recycle pad, unload tray cargo onto drop zone.
+    // Delivery: when safely landed on recycle pad, unload tray cargo by popping out of tray back.
     if (ship.landed) {
       const pad = terrain.pads.find(p => p.kind === 'recycle' && Math.abs(ship.x - p.x) <= p.w * 0.5);
       if (pad && ship.storedCargoIds.length > 0) {
         const ids = [...ship.storedCargoIds];
         ship.storedCargoIds = [];
         ship.cargoMass = 0;
+        ship.invincibleTimer = Math.max(ship.invincibleTimer, 2.2);
         ids.forEach((id, i) => {
           const c = cargos.find(k => k.id === id);
           if (!c || c.scored || c.accepting) return;
           c.stored = false;
           c.grabbed = false;
-          c.x = pad.x - 1 + i * 0.55;
-          c.y = pad.y - 1.1;
-          c.vx = (Math.random() - 0.5) * 0.4;
-          c.vy = 0;
+          const backLip = worldFromLocal(ship, { x: shipShape.trayRect.x - 0.15, y: shipShape.trayRect.y + shipShape.trayRect.h * 0.55 });
+          c.x = backLip.x;
+          c.y = backLip.y;
+          c.vx = ship.vx;
+          c.vy = ship.vy;
           c.restTimer = 0;
+          c.popping = true;
+          c.popDelay = i * 0.06;
+          c.ignoreTrayTimer = 1.0;
         });
       }
     }
@@ -1195,6 +1232,10 @@
     if (ship.landed && game.state === 'PLAYING') {
       ctx.fillStyle = '#7dffad';
       ctx.fillText('LANDED', 20, 102);
+    }
+    if (ship.invincibleTimer > 0.01) {
+      ctx.fillStyle = '#9cffb8';
+      ctx.fillText('INVINCIBLE', 20, 124);
     }
 
 
