@@ -64,7 +64,10 @@
   window.addEventListener('keydown', (e) => {
     if (blocked.has(e.code)) e.preventDefault();
     keys.add(e.code);
-    if (e.code === 'Space' && game.state === 'READY') startMission();
+    if (e.code === 'Space') {
+      if (game.state === 'READY') startMission();
+      else if (game.state === 'PLAYING') ship.trayExtended = !ship.trayExtended;
+    }
     if (e.code === 'KeyH') game.showHelp = !game.showHelp;
     if (e.code === 'Escape' && game.state !== 'CRASHED' && game.state !== 'READY') game.paused = !game.paused;
   }, { passive: false });
@@ -188,10 +191,23 @@
     bounceCount: 0,
     settleLock: false,
     invincibleTimer: 0,
+    trayExtended: false,
+    traySlide: 0,
   };
 
   function shipMass() {
     return ship.massBase + ship.cargoMass;
+  }
+
+
+  function getTrayRect() {
+    const slideOffset = (1 - ship.traySlide) * 1.15;
+    return {
+      x: shipShape.trayRect.x + slideOffset,
+      y: shipShape.trayRect.y,
+      w: shipShape.trayRect.w,
+      h: shipShape.trayRect.h,
+    };
   }
 
   const shipShape = {
@@ -289,6 +305,8 @@
     ship.bounceCount = 0;
     ship.settleLock = false;
     ship.invincibleTimer = 0;
+    ship.trayExtended = true;
+    ship.traySlide = 1;
     ship.angle = 0;
     ship.av = 0;
     randomizeWorld();
@@ -502,6 +520,8 @@
     ship.bounceCount = 0;
     ship.settleLock = false;
     ship.invincibleTimer = 0;
+    ship.trayExtended = false;
+    ship.traySlide = 0;
     setShipOnGround();
     game.camera.x = ship.x;
     game.camera.y = ship.y - 6;
@@ -532,6 +552,8 @@
 
   function updateShip(dt) {
     ship.invincibleTimer = Math.max(0, ship.invincibleTimer - dt);
+    const trayTarget = ship.trayExtended ? 1 : 0;
+    ship.traySlide = lerp(ship.traySlide, trayTarget, clamp(8 * dt, 0, 1));
     const mass = shipMass();
 
     const flying = !ship.landed || ship.throttle > 0.02 || Math.hypot(ship.vx, ship.vy) > 0.4;
@@ -638,7 +660,7 @@
   function updateCargo(dt) {
     const arm = getArmKinematics();
 
-    if (ship.grabbedCargo) {
+    if (ship.grabbedCargo && ship.traySlide > 0.55) {
       const c = cargos.find(k => k.id === ship.grabbedCargo);
       if (c) {
         c.grabbed = true;
@@ -688,7 +710,8 @@
         c.vx = ship.vx + shipBackDir.x * backKick + shipUpDir.x * burst + lateral;
         c.vy = ship.vy + shipBackDir.y * backKick + shipUpDir.y * burst - Math.random() * 0.2;
       } else {
-        const backLip = worldFromLocal(ship, { x: shipShape.trayRect.x - 0.15, y: shipShape.trayRect.y + shipShape.trayRect.h * 0.55 });
+        const trLip = getTrayRect();
+        const backLip = worldFromLocal(ship, { x: trLip.x - 0.15, y: trLip.y + trLip.h * 0.55 });
         c.x = backLip.x;
         c.y = backLip.y;
         c.vx = ship.vx;
@@ -722,10 +745,10 @@
     }
 
     // Tray catch: dropped/free cargo that enters tray bounds is caught and stored.
-    for (const c of cargos) {
+    if (ship.traySlide > 0.55) for (const c of cargos) {
       if (c.scored || c.accepting || c.stored || c.grabbed || c.popping || c.ignoreTrayTimer > 0) continue;
       const local = rotate({ x: c.x - ship.x, y: c.y - ship.y }, -ship.angle);
-      const tr = shipShape.trayRect;
+      const tr = getTrayRect();
       const inTray = local.x > tr.x + c.r && local.x < tr.x + tr.w - c.r && local.y > tr.y + c.r && local.y < tr.y + tr.h - c.r;
       if (!inTray) continue;
       c.stored = true;
@@ -739,11 +762,11 @@
     }
 
     // Tray storage: if grabbed cargo is lowered into tray and ship is landed/slow, snap store.
-    if (ship.grabbedCargo) {
+    if (ship.grabbedCargo && ship.traySlide > 0.55) {
       const c = cargos.find(k => k.id === ship.grabbedCargo);
       if (c) {
         const local = rotate({ x: c.x - ship.x, y: c.y - ship.y }, -ship.angle);
-        const tr = shipShape.trayRect;
+        const tr = getTrayRect();
         const inTray = local.x > tr.x && local.x < tr.x + tr.w && local.y > tr.y && local.y < tr.y + tr.h;
         const slow = Math.hypot(ship.vx, ship.vy) < 1.0;
         if (inTray && (ship.landed || slow)) {
@@ -782,7 +805,8 @@
           if (!c || c.scored || c.accepting) return;
           c.stored = false;
           c.grabbed = false;
-          const backLip = worldFromLocal(ship, { x: shipShape.trayRect.x - 0.15, y: shipShape.trayRect.y + shipShape.trayRect.h * 0.55 });
+          const trLip = getTrayRect();
+        const backLip = worldFromLocal(ship, { x: trLip.x - 0.15, y: trLip.y + trLip.h * 0.55 });
           c.x = backLip.x;
           c.y = backLip.y;
           c.vx = ship.vx;
@@ -1036,14 +1060,15 @@
       ctx.stroke();
     }
 
-    // Tray (same color as hull for visual continuity)
+    // Tray retract/extend bay
+    const tr = getTrayRect();
     ctx.fillStyle = '#d5dbe6';
-    ctx.fillRect(shipShape.trayRect.x * m, shipShape.trayRect.y * m, shipShape.trayRect.w * m, shipShape.trayRect.h * m);
+    ctx.fillRect(tr.x * m, tr.y * m, tr.w * m, tr.h * m);
     ctx.strokeStyle = '#18202c';
-    ctx.strokeRect(shipShape.trayRect.x * m, shipShape.trayRect.y * m, shipShape.trayRect.w * m, shipShape.trayRect.h * m);
+    ctx.strokeRect(tr.x * m, tr.y * m, tr.w * m, tr.h * m);
     ctx.fillStyle = '#d5dbe6';
-    ctx.fillRect(shipShape.trayRect.x * m, shipShape.trayRect.y * m, 5, shipShape.trayRect.h * m);
-    ctx.fillRect((shipShape.trayRect.x + shipShape.trayRect.w) * m - 5, shipShape.trayRect.y * m, 5, shipShape.trayRect.h * m);
+    ctx.fillRect(tr.x * m, tr.y * m, 5, tr.h * m);
+    ctx.fillRect((tr.x + tr.w) * m - 5, tr.y * m, 5, tr.h * m);
 
     // Hull
     ctx.fillStyle = '#d5dbe6';
@@ -1220,6 +1245,52 @@
     ctx.fillText(`${dist.toFixed(1)} m`, dX + 12, panelY + panelH * 0.72);
   }
 
+
+
+  function drawReadyControlsPanel() {
+    const panelW = Math.max(360, Math.floor(W * 0.34));
+    ctx.fillStyle = 'rgba(0,0,0,0.86)';
+    ctx.fillRect(0, 0, panelW, H);
+    ctx.strokeStyle = '#2b2b2b';
+    ctx.strokeRect(0, 0, panelW, H);
+
+    const lines = [
+      'CONTROLS',
+      '',
+      'A  - ROTATE LEFT',
+      'D  - ROTATE RIGHT',
+      'W  - THROTTLE UP',
+      'S  - THROTTLE DOWN',
+      'SPACE - START / TOGGLE TRAY',
+      '8  - ARM SEG1 UP',
+      '2  - ARM SEG1 DOWN',
+      '7  - ARM SEG2 UP',
+      '1  - ARM SEG2 DOWN',
+      '4  - BASE CCW',
+      '6  - BASE CW',
+      '9  - CLAW CLOSE',
+      '3  - CLAW OPEN',
+      'H  - HELP',
+      'ESC - PAUSE',
+    ];
+
+    let y = 52;
+    for (const line of lines) {
+      if (!line) { y += 14; continue; }
+      if (line === 'CONTROLS') {
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 40px Segoe UI';
+        ctx.fillText(line, 24, y);
+        y += 48;
+      } else {
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 24px Segoe UI';
+        ctx.fillText(line, 24, y);
+        y += 36;
+      }
+    }
+  }
+
   function drawHUD() {
     ctx.fillStyle = '#dce7ff';
     ctx.font = 'bold 24px Segoe UI';
@@ -1259,19 +1330,20 @@
     }
 
     if (game.state === 'READY') {
-      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.fillStyle = 'rgba(0,0,0,0.42)';
       ctx.fillRect(0, 0, W, H);
+      drawReadyControlsPanel();
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 44px Segoe UI';
-      ctx.fillText('SPACE RECYCLE HERO', W / 2 - 250, H / 2 - 28);
-      ctx.font = '22px Segoe UI';
+      ctx.font = 'bold 54px Segoe UI';
+      ctx.fillText('SPACE RECYCLE HERO', W * 0.44, H * 0.42);
+      ctx.font = 'bold 28px Segoe UI';
       ctx.fillStyle = '#9ce8ff';
-      ctx.fillText('Press SPACE to launch mission', W / 2 - 145, H / 2 + 12);
+      ctx.fillText('PRESS SPACE TO START', W * 0.48, H * 0.5);
     }
 
     drawBottomConsole();
 
-    if (game.showHelp) {
+    if (game.showHelp && game.state !== 'READY') {
       ctx.fillStyle = 'rgba(0,0,0,0.48)';
       ctx.fillRect(14, H - 168, 470, 150);
       ctx.strokeStyle = '#6b7ea8';
