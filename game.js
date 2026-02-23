@@ -465,7 +465,16 @@
       nextNoteTime: ctxA.currentTime,
       beatStep: 0,
       nextBeatTime: ctxA.currentTime,
-      seq: [329.63, 392, 440, 493.88, 523.25, 659.25, 587.33, 523.25],
+      phraseStep: 0,
+      currentPhrase: 0,
+      transpose: 1,
+      variationGate: 0,
+      seqs: [
+        [329.63, 392, 440, 493.88, 523.25, 659.25, 587.33, 523.25],
+        [392, 440, 493.88, 587.33, 523.25, 493.88, 440, 392],
+        [329.63, 369.99, 440, 554.37, 493.88, 440, 415.3, 369.99],
+        [261.63, 329.63, 392, 440, 493.88, 523.25, 587.33, 659.25],
+      ],
       triggerKick,
       triggerSnare,
     };
@@ -481,17 +490,31 @@
     const playing = game.state === 'PLAYING' && !game.paused;
 
     while (a.nextNoteTime < t + 0.03) {
-      const f = a.seq[a.noteIndex % a.seq.length];
-      a.melodyLead.frequency.setTargetAtTime(f, a.nextNoteTime, 0.02);
-      a.melodyHarmony.frequency.setTargetAtTime(f * 1.5, a.nextNoteTime, 0.02);
+      const seq = a.seqs[a.currentPhrase % a.seqs.length];
+      const i = a.noteIndex % seq.length;
+      const f = seq[i] * a.transpose;
+      const swing = (i % 2 === 0) ? 0.19 : 0.215;
+      a.melodyLead.frequency.setTargetAtTime(f, a.nextNoteTime, 0.018);
+      a.melodyHarmony.frequency.setTargetAtTime(f * (1.25 + ((a.currentPhrase % 3) * 0.07)), a.nextNoteTime, 0.02);
+
       a.noteIndex += 1;
-      a.nextNoteTime += 0.2;
+      a.phraseStep += 1;
+      a.nextNoteTime += swing;
+
+      // Every phrase, rotate patterns and transpose lightly to reduce repetition.
+      if (a.phraseStep % seq.length === 0) {
+        a.currentPhrase = (a.currentPhrase + 1) % a.seqs.length;
+        const transposes = [1, 1, 1.05946, 0.94387];
+        a.transpose = transposes[(a.currentPhrase + a.variationGate) % transposes.length];
+        a.variationGate = (a.variationGate + 1) % 7;
+      }
     }
 
     while (a.nextBeatTime < t + 0.03) {
       const step = a.beatStep % 16;
-      if (step === 0 || step === 8) a.triggerKick(a.nextBeatTime);
-      if (step === 4 || step === 12) a.triggerSnare(a.nextBeatTime);
+      const bar = Math.floor(a.beatStep / 16) % 8;
+      if (step === 0 || step === 8 || (bar % 3 === 2 && step === 12)) a.triggerKick(a.nextBeatTime);
+      if (step === 4 || step === 12 || (bar % 4 === 3 && step === 14)) a.triggerSnare(a.nextBeatTime);
       a.beatStep += 1;
       a.nextBeatTime += 0.12;
     }
