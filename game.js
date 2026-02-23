@@ -340,7 +340,6 @@
     ship.landed = true;
   }
 
-
   function distanceToGroundMeters() {
     const skidL = worldFromLocal(ship, shipShape.skidL);
     const skidR = worldFromLocal(ship, shipShape.skidR);
@@ -356,63 +355,119 @@
     const ctxA = new Ctx();
 
     const master = ctxA.createGain();
-    master.gain.value = 0.2;
+    master.gain.value = 0.24;
     master.connect(ctxA.destination);
 
-    const musicGain = ctxA.createGain();
-    musicGain.gain.value = 0.04;
-    musicGain.connect(master);
+    const melodyGain = ctxA.createGain();
+    melodyGain.gain.value = 0.05;
+    melodyGain.connect(master);
 
-    const musicA = ctxA.createOscillator();
-    musicA.type = 'triangle';
-    musicA.frequency.value = 220;
-    musicA.connect(musicGain);
-    musicA.start();
+    const melodyLead = ctxA.createOscillator();
+    melodyLead.type = 'triangle';
+    melodyLead.frequency.value = 220;
+    melodyLead.connect(melodyGain);
+    melodyLead.start();
 
-    const musicB = ctxA.createOscillator();
-    musicB.type = 'sine';
-    musicB.frequency.value = 330;
-    const musicBGain = ctxA.createGain();
-    musicBGain.gain.value = 0.024;
-    musicB.connect(musicBGain);
-    musicBGain.connect(master);
-    musicB.start();
+    const harmonyGain = ctxA.createGain();
+    harmonyGain.gain.value = 0.035;
+    harmonyGain.connect(master);
+    const melodyHarmony = ctxA.createOscillator();
+    melodyHarmony.type = 'sine';
+    melodyHarmony.frequency.value = 330;
+    melodyHarmony.connect(harmonyGain);
+    melodyHarmony.start();
 
     const rumbleGain = ctxA.createGain();
     rumbleGain.gain.value = 0;
-    const rumbleLP = ctxA.createBiquadFilter();
-    rumbleLP.type = 'lowpass';
-    rumbleLP.frequency.value = 110;
-    rumbleLP.Q.value = 0.9;
     const rumble = ctxA.createOscillator();
     rumble.type = 'sawtooth';
-    rumble.frequency.value = 52;
-    rumble.connect(rumbleLP);
-    rumbleLP.connect(rumbleGain);
+    rumble.frequency.value = 62;
+    rumble.connect(rumbleGain);
     rumbleGain.connect(master);
     rumble.start();
+
+    const rocketToneGain = ctxA.createGain();
+    rocketToneGain.gain.value = 0;
+    const rocketTone = ctxA.createOscillator();
+    rocketTone.type = 'triangle';
+    rocketTone.frequency.value = 120;
+    const rocketFilter = ctxA.createBiquadFilter();
+    rocketFilter.type = 'bandpass';
+    rocketFilter.frequency.value = 260;
+    rocketFilter.Q.value = 1.8;
+    rocketTone.connect(rocketFilter);
+    rocketFilter.connect(rocketToneGain);
+    rocketToneGain.connect(master);
+    rocketTone.start();
 
     const hydroGain = ctxA.createGain();
     hydroGain.gain.value = 0;
     const hydro = ctxA.createOscillator();
-    hydro.type = 'square';
-    hydro.frequency.value = 90;
-    hydro.connect(hydroGain);
+    hydro.type = 'sawtooth';
+    hydro.frequency.value = 145;
+    const hydroFilter = ctxA.createBiquadFilter();
+    hydroFilter.type = 'bandpass';
+    hydroFilter.frequency.value = 420;
+    hydroFilter.Q.value = 3;
+    hydro.connect(hydroFilter);
+    hydroFilter.connect(hydroGain);
     hydroGain.connect(master);
     hydro.start();
+
+    const noiseBuffer = ctxA.createBuffer(1, ctxA.sampleRate * 0.25, ctxA.sampleRate);
+    const noiseData = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < noiseData.length; i++) noiseData[i] = Math.random() * 2 - 1;
+
+    function triggerKick(time) {
+      const o = ctxA.createOscillator();
+      const g = ctxA.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(150, time);
+      o.frequency.exponentialRampToValueAtTime(45, time + 0.16);
+      g.gain.setValueAtTime(0.0001, time);
+      g.gain.exponentialRampToValueAtTime(0.18, time + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, time + 0.2);
+      o.connect(g);
+      g.connect(master);
+      o.start(time);
+      o.stop(time + 0.22);
+    }
+
+    function triggerSnare(time) {
+      const n = ctxA.createBufferSource();
+      n.buffer = noiseBuffer;
+      const hp = ctxA.createBiquadFilter();
+      hp.type = 'highpass';
+      hp.frequency.value = 1700;
+      const g = ctxA.createGain();
+      g.gain.setValueAtTime(0.0001, time);
+      g.gain.exponentialRampToValueAtTime(0.08, time + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001, time + 0.11);
+      n.connect(hp);
+      hp.connect(g);
+      g.connect(master);
+      n.start(time);
+      n.stop(time + 0.12);
+    }
 
     game.audio = {
       ctx: ctxA,
       master,
-      musicA,
-      musicB,
+      melodyLead,
+      melodyHarmony,
       rumble,
       rumbleGain,
+      rocketTone,
+      rocketToneGain,
       hydro,
       hydroGain,
       noteIndex: 0,
       nextNoteTime: ctxA.currentTime,
-      seq: [220, 277.18, 329.63, 440, 329.63, 277.18, 246.94, 329.63],
+      beatStep: 0,
+      nextBeatTime: ctxA.currentTime,
+      seq: [220, 246.94, 293.66, 329.63, 392, 329.63, 293.66, 261.63],
+      triggerKick,
+      triggerSnare,
     };
   }
 
@@ -423,29 +478,42 @@
 
     if (a.ctx.state === 'suspended' && game.state === 'PLAYING') a.ctx.resume();
 
-    while (a.nextNoteTime < t + 0.02) {
+    const playing = game.state === 'PLAYING' && !game.paused;
+
+    while (a.nextNoteTime < t + 0.03) {
       const f = a.seq[a.noteIndex % a.seq.length];
-      a.musicA.frequency.setTargetAtTime(f, a.nextNoteTime, 0.03);
-      a.musicB.frequency.setTargetAtTime(f * 1.5, a.nextNoteTime, 0.03);
+      a.melodyLead.frequency.setTargetAtTime(f, a.nextNoteTime, 0.02);
+      a.melodyHarmony.frequency.setTargetAtTime(f * 1.5, a.nextNoteTime, 0.02);
       a.noteIndex += 1;
       a.nextNoteTime += 0.24;
     }
 
-    const playing = game.state === 'PLAYING' && !game.paused;
+    while (a.nextBeatTime < t + 0.03) {
+      const step = a.beatStep % 16;
+      if (step === 0 || step === 8) a.triggerKick(a.nextBeatTime);
+      if (step === 4 || step === 12) a.triggerSnare(a.nextBeatTime);
+      a.beatStep += 1;
+      a.nextBeatTime += 0.12;
+    }
+
     const armMoving = keys.has('Numpad8') || keys.has('Digit8') || keys.has('Numpad2') || keys.has('Digit2') ||
       keys.has('Numpad7') || keys.has('Digit7') || keys.has('Numpad1') || keys.has('Digit1') ||
       keys.has('Numpad4') || keys.has('Digit4') || keys.has('Numpad6') || keys.has('Digit6') ||
       keys.has('Numpad9') || keys.has('Digit9') || keys.has('Numpad3') || keys.has('Digit3');
 
-    const targetRumble = playing ? Math.max(0, ship.throttle) * 0.06 : 0;
-    a.rumbleGain.gain.setTargetAtTime(targetRumble, t, 0.07);
-    a.rumble.frequency.setTargetAtTime(45 + ship.throttle * 28, t, 0.08);
+    const targetRumble = playing ? Math.max(0, ship.throttle) * 0.08 : 0;
+    a.rumbleGain.gain.setTargetAtTime(targetRumble, t, 0.05);
+    a.rumble.frequency.setTargetAtTime(52 + ship.throttle * 35, t, 0.05);
 
-    const targetHydro = (playing && armMoving) ? 0.022 : 0;
-    a.hydroGain.gain.setTargetAtTime(targetHydro, t, 0.03);
-    a.hydro.frequency.setTargetAtTime(78 + Math.sin(t * 20) * 12, t, 0.04);
+    const targetRocketTone = playing ? Math.max(0, ship.throttle) * 0.05 : 0;
+    a.rocketToneGain.gain.setTargetAtTime(targetRocketTone, t, 0.04);
+    a.rocketTone.frequency.setTargetAtTime(95 + ship.throttle * 120, t, 0.05);
 
-    a.master.gain.setTargetAtTime(playing ? 0.2 : 0.1, t, 0.1);
+    const targetHydro = (playing && armMoving) ? 0.03 : 0;
+    a.hydroGain.gain.setTargetAtTime(targetHydro, t, 0.02);
+    a.hydro.frequency.setTargetAtTime(140 + Math.abs(Math.sin(t * 15)) * 90, t, 0.02);
+
+    a.master.gain.setTargetAtTime(playing ? 0.24 : 0.1, t, 0.08);
   }
 
   randomizeWorld();
