@@ -821,7 +821,8 @@
     // Delivery: when safely landed on recycle pad, unload tray cargo by popping out of tray back.
     if (ship.landed) {
       const pad = terrain.pads.find(p => p.kind === 'recycle' && Math.abs(ship.x - p.x) <= p.w * 0.5);
-      if (pad && ship.storedCargoIds.length > 0) {
+      const trayOpenForUnload = ship.trayExtended && ship.traySlide > 0.8;
+      if (pad && trayOpenForUnload && ship.storedCargoIds.length > 0) {
         const ids = [...ship.storedCargoIds];
         ship.storedCargoIds = [];
         ship.cargoMass = 0;
@@ -1113,6 +1114,13 @@
     ctx.strokeStyle = '#18202c';
     ctx.lineWidth = 2;
     ctx.stroke();
+
+    // Centered recycle logo on hull
+    ctx.fillStyle = '#39ff72';
+    ctx.font = `bold ${Math.max(12, m * 0.24)}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('RECYCLE', 0, -0.08 * m);
 
     // Skids (safe landing colliders)
     ctx.strokeStyle = '#73ffcf';
