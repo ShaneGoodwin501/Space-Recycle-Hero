@@ -1116,11 +1116,11 @@
     ctx.stroke();
 
     // Centered recycle logo on hull
-    ctx.fillStyle = '#39ff72';
+    ctx.fillStyle = '#1f8f3a';
     ctx.font = `bold ${Math.max(12, m * 0.24)}px monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('RECYCLE', 0, -0.08 * m);
+    ctx.fillText('Recycle Hero', 0, -0.08 * m);
 
     // Skids (safe landing colliders)
     ctx.strokeStyle = '#73ffcf';
