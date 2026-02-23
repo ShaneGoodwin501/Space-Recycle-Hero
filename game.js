@@ -273,6 +273,9 @@
         popDelay: 0,
         popping: false,
         ignoreTrayTimer: 0,
+        recyclePadX: 0,
+        recyclePadW: 0,
+        recycleLockTimer: 0,
       });
     }
   }
@@ -704,20 +707,21 @@
       }
     }
 
-    // Popcorn ejection behavior for recycle unloading from tray back.
-    const shipBackDir = rotate({ x: -1, y: 0 }, ship.angle);
+    // Recycle-pad ejection behavior: cargo pops out but is guided to land and remain on the pad.
     const shipUpDir = rotate({ x: 0, y: -1 }, ship.angle);
     for (const c of cargos) {
       if (c.ignoreTrayTimer > 0) c.ignoreTrayTimer = Math.max(0, c.ignoreTrayTimer - dt);
+      if (c.recycleLockTimer > 0) c.recycleLockTimer = Math.max(0, c.recycleLockTimer - dt);
       if (!c.popping) continue;
       c.popDelay -= dt;
       if (c.popDelay <= 0) {
         c.popping = false;
-        const burst = 2.0 + Math.random() * 2.2;
-        const backKick = 1.3 + Math.random() * 1.6;
-        const lateral = (Math.random() - 0.5) * 1.0;
-        c.vx = ship.vx + shipBackDir.x * backKick + shipUpDir.x * burst + lateral;
-        c.vy = ship.vy + shipBackDir.y * backKick + shipUpDir.y * burst - Math.random() * 0.2;
+        const padLeft = c.recyclePadX - c.recyclePadW * 0.42;
+        const padRight = c.recyclePadX + c.recyclePadW * 0.42;
+        const goalX = clamp(c.targetX || c.recyclePadX, padLeft + c.r, padRight - c.r);
+        const dx = goalX - c.x;
+        c.vx = ship.vx + clamp(dx * 2.4, -1.15, 1.15);
+        c.vy = ship.vy + shipUpDir.y * 0.9 - 1.0;
       } else {
         const trLip = getTrayRect();
         const backLip = worldFromLocal(ship, { x: trLip.x - 0.15, y: trLip.y + trLip.h * 0.55 });
@@ -740,12 +744,25 @@
       c.angle += c.av * dt;
 
       c.x = clamp(c.x, c.r, CONFIG.worldWidth - c.r);
+      if (c.recycleLockTimer > 0 && c.recyclePadW > 0) {
+        const padLeft = c.recyclePadX - c.recyclePadW * 0.42 + c.r;
+        const padRight = c.recyclePadX + c.recyclePadW * 0.42 - c.r;
+        c.x = clamp(c.x, padLeft, padRight);
+        c.vx *= 0.65;
+      }
       const gy = terrainY(c.x) - c.r;
       if (c.y > gy) {
         c.y = gy;
         if (Math.abs(c.vy) > 0.3) c.vy *= -0.22;
         else c.vy = 0;
         c.vx *= 0.88;
+        if (c.recycleLockTimer > 0 && c.recyclePadW > 0) {
+          const padLeft = c.recyclePadX - c.recyclePadW * 0.42 + c.r;
+          const padRight = c.recyclePadX + c.recyclePadW * 0.42 - c.r;
+          c.x = clamp(c.x, padLeft, padRight);
+          c.vx = 0;
+          if (Math.abs(c.vy) < 0.35) c.vy = 0;
+        }
       }
 
       const speed = Math.hypot(c.vx, c.vy);
@@ -815,14 +832,19 @@
           c.stored = false;
           c.grabbed = false;
           const trLip = getTrayRect();
-        const backLip = worldFromLocal(ship, { x: trLip.x - 0.15, y: trLip.y + trLip.h * 0.55 });
+          const backLip = worldFromLocal(ship, { x: trLip.x - 0.15, y: trLip.y + trLip.h * 0.55 });
+          const slot = (i + 1) / (ids.length + 1);
+          c.targetX = pad.x - pad.w * 0.34 + slot * (pad.w * 0.68);
+          c.recyclePadX = pad.x;
+          c.recyclePadW = pad.w;
+          c.recycleLockTimer = 3.5;
           c.x = backLip.x;
           c.y = backLip.y;
           c.vx = ship.vx;
           c.vy = ship.vy;
           c.restTimer = 0;
           c.popping = true;
-          c.popDelay = i * 0.06;
+          c.popDelay = i * 0.07;
           c.ignoreTrayTimer = 1.0;
         });
       }
@@ -1389,7 +1411,11 @@
 
     drawBackground();
     drawTerrainAndPads();
-    for (const c of cargos) if (!c.scored) drawCargo(c);
+    for (const c of cargos) {
+      if (c.scored) continue;
+      if (c.stored && ship.traySlide < 0.55) continue;
+      drawCargo(c);
+    }
     if (game.state !== 'CRASHED') drawShip();
     drawExplosions();
     drawHUD();
