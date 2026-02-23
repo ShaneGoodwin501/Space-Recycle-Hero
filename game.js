@@ -358,16 +358,6 @@
     master.gain.value = 0.24;
     master.connect(ctxA.destination);
 
-    // No melody layer (copyright-safe); keep original drum/bass groove only.
-    const bassGain = ctxA.createGain();
-    bassGain.gain.value = 0.028;
-    bassGain.connect(master);
-    const bass = ctxA.createOscillator();
-    bass.type = 'square';
-    bass.frequency.value = 98;
-    bass.connect(bassGain);
-    bass.start();
-
     const rumbleGain = ctxA.createGain();
     rumbleGain.gain.value = 0;
     const rumble = ctxA.createOscillator();
@@ -405,57 +395,15 @@
     hydroGain.connect(master);
     hydro.start();
 
-    const noiseBuffer = ctxA.createBuffer(1, ctxA.sampleRate * 0.25, ctxA.sampleRate);
-    const noiseData = noiseBuffer.getChannelData(0);
-    for (let i = 0; i < noiseData.length; i++) noiseData[i] = Math.random() * 2 - 1;
-
-    function triggerKick(time) {
-      const o = ctxA.createOscillator();
-      const g = ctxA.createGain();
-      o.type = 'sine';
-      o.frequency.setValueAtTime(150, time);
-      o.frequency.exponentialRampToValueAtTime(45, time + 0.16);
-      g.gain.setValueAtTime(0.0001, time);
-      g.gain.exponentialRampToValueAtTime(0.18, time + 0.01);
-      g.gain.exponentialRampToValueAtTime(0.0001, time + 0.2);
-      o.connect(g);
-      g.connect(master);
-      o.start(time);
-      o.stop(time + 0.22);
-    }
-
-    function triggerSnare(time) {
-      const n = ctxA.createBufferSource();
-      n.buffer = noiseBuffer;
-      const hp = ctxA.createBiquadFilter();
-      hp.type = 'highpass';
-      hp.frequency.value = 1700;
-      const g = ctxA.createGain();
-      g.gain.setValueAtTime(0.0001, time);
-      g.gain.exponentialRampToValueAtTime(0.08, time + 0.005);
-      g.gain.exponentialRampToValueAtTime(0.0001, time + 0.11);
-      n.connect(hp);
-      hp.connect(g);
-      g.connect(master);
-      n.start(time);
-      n.stop(time + 0.12);
-    }
-
     game.audio = {
       ctx: ctxA,
       master,
-      bass,
-      bassGain,
       rumble,
       rumbleGain,
       rocketTone,
       rocketToneGain,
       hydro,
       hydroGain,
-      beatStep: 0,
-      nextBeatTime: ctxA.currentTime,
-      triggerKick,
-      triggerSnare,
     };
   }
 
@@ -468,26 +416,10 @@
 
     const playing = game.state === 'PLAYING' && !game.paused;
 
-    while (a.nextBeatTime < t + 0.03) {
-      const step = a.beatStep % 16;
-      const bar = Math.floor(a.beatStep / 16) % 8;
-      if (step === 0 || step === 8 || (bar % 3 === 2 && step === 12)) a.triggerKick(a.nextBeatTime);
-      if (step === 4 || step === 12 || (bar % 4 === 3 && step === 14)) a.triggerSnare(a.nextBeatTime);
-      a.beatStep += 1;
-      a.nextBeatTime += 0.12;
-    }
-
-    const grooveStep = a.beatStep % 8;
-    const bassFreqs = [98, 98, 110, 98, 123.47, 110, 98, 92.5];
-    a.bass.frequency.setTargetAtTime(bassFreqs[grooveStep], t, 0.03);
-
     const armMoving = keys.has('Numpad8') || keys.has('Digit8') || keys.has('Numpad2') || keys.has('Digit2') ||
       keys.has('Numpad7') || keys.has('Digit7') || keys.has('Numpad1') || keys.has('Digit1') ||
       keys.has('Numpad4') || keys.has('Digit4') || keys.has('Numpad6') || keys.has('Digit6') ||
       keys.has('Numpad9') || keys.has('Digit9') || keys.has('Numpad3') || keys.has('Digit3');
-
-    const targetBass = playing ? 0.028 : 0;
-    a.bassGain.gain.setTargetAtTime(targetBass, t, 0.08);
 
     const targetRumble = playing ? Math.max(0, ship.throttle) * 0.08 : 0;
     a.rumbleGain.gain.setTargetAtTime(targetRumble, t, 0.05);
