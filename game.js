@@ -25,9 +25,9 @@
     impactRobustness: 1.4,
 
     clawRate: 0.7,
-    baseRate: 95 * Math.PI / 180,
-    seg1Rate: 110 * Math.PI / 180,
-    seg2Rate: 110 * Math.PI / 180,
+    baseRate: 47.5 * Math.PI / 180,
+    seg1Rate: 55 * Math.PI / 180,
+    seg2Rate: 55 * Math.PI / 180,
 
     worldWidth: 260,
     terrainStep: 2,
