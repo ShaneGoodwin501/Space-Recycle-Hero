@@ -662,11 +662,12 @@
     const horizontalMargin = shipShape.hullRadius;
     const leftWall = horizontalMargin;
     const rightWall = CONFIG.worldWidth - horizontalMargin;
-    const touchedLeftWall = ship.x <= leftWall;
-    const touchedRightWall = ship.x >= rightWall;
     ship.x = clamp(ship.x, leftWall, rightWall);
-    if (touchedLeftWall && ship.vx < 0) ship.vx = 0;
-    if (touchedRightWall && ship.vx > 0) ship.vx = 0;
+    const wallEpsilon = 1e-4;
+    const atLeftWall = ship.x <= leftWall + wallEpsilon;
+    const atRightWall = ship.x >= rightWall - wallEpsilon;
+    if (atLeftWall && ship.vx < 0) ship.vx = 0;
+    if (atRightWall && ship.vx > 0) ship.vx = 0;
 
     // Stop at altitude/world edges to prevent off-screen glitch behavior.
     const tm = terrainMetrics();
@@ -1002,6 +1003,8 @@
     if (shipScreenY < gameplayH * 0.12 || shipScreenY > gameplayH * 0.88) {
       game.camera.y = targetY;
     }
+
+    game.camera.x = clamp(game.camera.x, minX, maxX);
   }
 
   function updateExplosions(dt) {
