@@ -75,7 +75,7 @@
   resize();
 
   const keys = new Set();
-  const blocked = new Set(['KeyW','KeyA','KeyS','KeyD','KeyI','KeyO','KeyK','KeyL','KeyN','KeyM','Semicolon','Quote','Space','Escape','KeyH']);
+  const blocked = new Set(['KeyW','KeyA','KeyS','KeyD','KeyI','KeyO','KeyK','KeyL','KeyN','KeyM','Comma','Period','Space','Escape','KeyH']);
   function unlockAudioFromUserGesture() {
     initAudio();
     if (game.audio?.ctx && game.audio.ctx.state !== 'running') game.audio.ctx.resume();
@@ -454,7 +454,7 @@
     const armMoving = keys.has('KeyI') || keys.has('KeyO') ||
       keys.has('KeyN') || keys.has('KeyM') ||
       keys.has('KeyK') || keys.has('KeyL') ||
-      keys.has('Semicolon') || keys.has('Quote');
+      keys.has('Comma') || keys.has('Period');
 
     const targetRumble = playing ? Math.max(0, ship.throttle) * 0.1352 : 0;
     a.rumbleGain.gain.setTargetAtTime(targetRumble, t, 0.05);
@@ -571,8 +571,8 @@
     if (keys.has('KeyO')) ship.seg1Angle += CONFIG.seg1Rate * dt;
     if (keys.has('KeyN')) ship.seg2Angle -= CONFIG.seg2Rate * dt;
     if (keys.has('KeyM')) ship.seg2Angle += CONFIG.seg2Rate * dt;
-    if (keys.has('Semicolon')) ship.clawOpen = clamp(ship.clawOpen - CONFIG.clawRate * dt, 0, 1);
-    if (keys.has('Quote')) ship.clawOpen = clamp(ship.clawOpen + CONFIG.clawRate * dt, 0, 1);
+    if (keys.has('Comma')) ship.clawOpen = clamp(ship.clawOpen - CONFIG.clawRate * dt, 0, 1);
+    if (keys.has('Period')) ship.clawOpen = clamp(ship.clawOpen + CONFIG.clawRate * dt, 0, 1);
 
     ship.baseAngle = clamp(ship.baseAngle, -120 * Math.PI/180, 120 * Math.PI/180);
     // Segment joints are intentionally unbounded for full 360° continuous control.
@@ -1445,8 +1445,8 @@
         'N  - ARM SEG2 DOWN',
         'K  - BASE CCW',
         'L  - BASE CW',
-        ';  - CLAW CLOSE',
-        "'  - CLAW OPEN",
+        ',  - CLAW CLOSE',
+        '.  - CLAW OPEN',
         'H  - HELP / PAUSE',
         'ESC - PAUSE',
       ]);
@@ -1487,7 +1487,7 @@
         'O / I  - ARM SEGMENT 1 UP / DOWN',
         'M / N  - ARM SEGMENT 2 UP / DOWN',
         'K / L  - ARM BASE CCW / CW',
-        "; / '  - CLAW CLOSE / OPEN",
+        ', / .  - CLAW CLOSE / OPEN',
         'SAFE LANDING: SKIDS ONLY, LOW SPEED',
         'LAND ON REFUEL PAD TO REFILL FUEL',
         'LAND ON RECYCLE PAD TO DELIVER CARGO',
