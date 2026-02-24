@@ -86,6 +86,9 @@
     if (blocked.has(e.code)) e.preventDefault();
     keys.add(e.code);
     unlockAudioFromUserGesture();
+
+    if (handleNameEntryKey(e)) return;
+
     if (e.code === 'Space') {
       if (game.state === 'READY') startMission();
       else if (game.state === 'PLAYING') ship.trayExtended = !ship.trayExtended;
@@ -370,7 +373,7 @@
     leaderboard: [],
     leaderboardError: '',
     leaderboardLoaded: false,
-    pendingScoreSubmit: false,
+    nameEntry: { active: false, value: '', score: 0, submitting: false, message: '' },
   };
 
 
@@ -427,22 +430,71 @@
     }
   }
 
-  function maybePromptForLeaderboardEntry() {
-    if (game.pendingScoreSubmit) return;
-    if (!scoreQualifiesForLeaderboard(game.score)) return;
 
-    game.pendingScoreSubmit = true;
-    const raw = window.prompt('New high score! Enter your name (max 10 characters):', '');
-    const name = normalizePlayerName(raw);
+  async function submitNameEntry() {
+    const entry = game.nameEntry;
+    if (!entry.active || entry.submitting) return;
+    const name = normalizePlayerName(entry.value);
     if (!name) {
-      game.pendingScoreSubmit = false;
+      entry.message = 'Enter 1-10 characters';
       return;
     }
 
-    submitLeaderboardScore(name, game.score)
-      .finally(() => {
-        game.pendingScoreSubmit = false;
-      });
+    entry.submitting = true;
+    entry.message = 'Saving...';
+    const ok = await submitLeaderboardScore(name, entry.score);
+    entry.submitting = false;
+    entry.message = ok ? 'Saved!' : 'Save failed';
+
+    if (ok) {
+      entry.active = false;
+      entry.value = '';
+    }
+  }
+
+  function beginLeaderboardNameEntry() {
+    if (game.nameEntry.active) return;
+    if (!scoreQualifiesForLeaderboard(game.score)) return;
+    game.nameEntry.active = true;
+    game.nameEntry.value = '';
+    game.nameEntry.score = Math.floor(game.score);
+    game.nameEntry.submitting = false;
+    game.nameEntry.message = 'New high score! Enter your name';
+  }
+
+  function handleNameEntryKey(e) {
+    const entry = game.nameEntry;
+    if (!entry.active) return false;
+
+    if (e.code === 'Enter') {
+      e.preventDefault();
+      submitNameEntry();
+      return true;
+    }
+
+    if (e.code === 'Escape') {
+      e.preventDefault();
+      if (!entry.submitting) {
+        entry.active = false;
+        entry.value = '';
+      }
+      return true;
+    }
+
+    if (e.code === 'Backspace') {
+      e.preventDefault();
+      if (!entry.submitting) entry.value = entry.value.slice(0, -1);
+      return true;
+    }
+
+    if (!entry.submitting && e.key && e.key.length === 1) {
+      const next = normalizePlayerName(entry.value + e.key);
+      if (next.length <= 10) entry.value = next;
+      e.preventDefault();
+      return true;
+    }
+
+    return true;
   }
 
 
@@ -480,7 +532,6 @@
     game.camera.x = ship.x;
     game.camera.y = ship.y - 6;
     game.state = 'PLAYING';
-    game.pendingScoreSubmit = false;
     game.showHelp = false;
     initAudio();
   }
@@ -650,7 +701,7 @@
     ship.cargoMass = 0;
     // eslint-disable-next-line no-console
     console.info('Crash:', reason);
-    maybePromptForLeaderboardEntry();
+    beginLeaderboardNameEntry();
   }
 
   function respawnShip() {
@@ -1670,6 +1721,7 @@
 
     drawBottomConsole();
 
+
     if (game.showHelp && game.state !== 'READY') {
       drawLeftInfoPanel('HELP', [
         'A / D  - ROTATE SHIP',
@@ -1684,6 +1736,49 @@
         'LAND ON RECYCLE PAD TO DELIVER CARGO',
         'H  - CLOSE HELP AND RESUME',
       ]);
+    }
+
+    if (game.nameEntry.active) {
+      const boxW = Math.min(560, Math.floor(W * 0.75));
+      const boxH = 190;
+      const x = Math.floor((W - boxW) * 0.5);
+      const y = Math.floor((getGameplayHeight() - boxH) * 0.45);
+
+      ctx.fillStyle = 'rgba(0,0,0,0.72)';
+      ctx.fillRect(0, 0, W, getGameplayHeight());
+      ctx.fillStyle = '#151a29';
+      ctx.fillRect(x, y, boxW, boxH);
+      ctx.strokeStyle = '#9ce8ff';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x, y, boxW, boxH);
+
+      const entry = game.nameEntry;
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 26px Segoe UI';
+      ctx.fillText('NEW HIGH SCORE!', x + 20, y + 38);
+      ctx.font = '16px Segoe UI';
+      ctx.fillStyle = '#dbe9ff';
+      ctx.fillText(`Score: ${entry.score}`, x + 20, y + 62);
+      ctx.fillText('Enter name (max 10):', x + 20, y + 88);
+
+      const fieldW = boxW - 40;
+      const fieldY = y + 100;
+      ctx.fillStyle = '#0e1422';
+      ctx.fillRect(x + 20, fieldY, fieldW, 38);
+      ctx.strokeStyle = '#6ccfff';
+      ctx.strokeRect(x + 20, fieldY, fieldW, 38);
+
+      const displayName = (entry.value || '').slice(0, 10);
+      const cursor = Math.floor(performance.now() / 500) % 2 === 0 ? '|' : ' ';
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 22px Consolas, monospace';
+      ctx.fillText(displayName + (entry.submitting ? '' : cursor), x + 28, fieldY + 26);
+
+      ctx.font = '14px Segoe UI';
+      ctx.fillStyle = entry.message.includes('failed') ? '#ff9a9a' : '#9ce8ff';
+      ctx.fillText(entry.message || 'Press Enter to submit', x + 20, y + 158);
+      ctx.fillStyle = '#9fb5cf';
+      ctx.fillText('Enter = Submit, Backspace = Delete, Esc = Cancel', x + 20, y + 176);
     }
   }
 
