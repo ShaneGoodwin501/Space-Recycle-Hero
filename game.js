@@ -1276,6 +1276,7 @@
     ctx.stroke();
 
     const pad = 16;
+    const gap = 12;
     const panelH = h - 24;
     const panelY = y + 12;
 
@@ -1294,17 +1295,21 @@
       ctx.fillText(`${Math.round(value * 100)}${unit}`, x + 10, panelY + 44);
     }
 
-    const barW = Math.max(170, W * 0.18);
+    const innerW = W - pad * 2;
+    const barW = Math.max(160, Math.min(280, innerW * 0.18));
+    const fuelX = pad + barW + gap;
     drawBar(pad, barW, 'THROTTLE', ship.throttle);
-    drawBar(pad + barW + 14, barW, 'FUEL', ship.fuel / 100);
+    drawBar(fuelX, barW, 'FUEL', ship.fuel / 100);
 
     const gaugeSize = Math.min(panelH - 10, 110);
-    const gx = pad + barW * 2 + 38;
+    const attitudePanelW = gaugeSize + 32;
+    const attitudeX = fuelX + barW + gap;
+    const gx = attitudeX + attitudePanelW / 2;
     const gy = panelY + panelH / 2;
     ctx.fillStyle = '#000';
-    ctx.fillRect(gx - gaugeSize / 2 - 16, panelY, gaugeSize + 32, panelH);
+    ctx.fillRect(attitudeX, panelY, attitudePanelW, panelH);
     ctx.strokeStyle = '#0b5';
-    ctx.strokeRect(gx - gaugeSize / 2 - 16, panelY, gaugeSize + 32, panelH);
+    ctx.strokeRect(attitudeX, panelY, attitudePanelW, panelH);
     ctx.strokeStyle = '#7dff9c';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -1323,10 +1328,10 @@
     ctx.font = 'bold 13px Segoe UI';
     ctx.fillText('ATTITUDE', gx - 30, panelY + 18);
 
-    const dX = gx + gaugeSize / 2 + 36;
+    const dX = attitudeX + attitudePanelW + gap;
     const totalW = Math.max(280, W - dX - pad);
     const scoreW = Math.min(220, Math.max(150, totalW * 0.3));
-    const distW = totalW - scoreW - 12;
+    const distW = totalW - scoreW - gap;
 
     ctx.fillStyle = '#000';
     ctx.fillRect(dX, panelY, distW, panelH);
@@ -1339,7 +1344,7 @@
     ctx.font = 'bold 44px "Consolas", monospace';
     ctx.fillText(`${dist.toFixed(1)} m`, dX + 12, panelY + panelH * 0.72);
 
-    const scoreX = dX + distW + 12;
+    const scoreX = dX + distW + gap;
     ctx.fillStyle = '#000';
     ctx.fillRect(scoreX, panelY, scoreW, panelH);
     ctx.strokeStyle = '#0b5';
