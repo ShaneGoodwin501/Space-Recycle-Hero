@@ -89,8 +89,14 @@
       if (game.state === 'READY') startMission();
       else if (game.state === 'PLAYING') ship.trayExtended = !ship.trayExtended;
     }
-    if (e.code === 'KeyH') game.showHelp = !game.showHelp;
-    if (e.code === 'Escape' && game.state !== 'CRASHED' && game.state !== 'READY') game.paused = !game.paused;
+    if (e.code === 'KeyH' && game.state === 'PLAYING') {
+      game.showHelp = !game.showHelp;
+      game.paused = game.showHelp;
+    }
+    if (e.code === 'Escape' && game.state !== 'CRASHED' && game.state !== 'READY') {
+      game.paused = !game.paused;
+      if (!game.paused) game.showHelp = false;
+    }
   }, { passive: false });
   window.addEventListener('pointerdown', unlockAudioFromUserGesture, { passive: true });
   window.addEventListener('keyup', (e) => {
@@ -1358,47 +1364,49 @@
 
 
 
-  function drawReadyControlsPanel() {
+  function drawLeftInfoPanel(title, lines) {
     const panelW = Math.max(360, Math.floor(W * 0.34));
     ctx.fillStyle = 'rgba(0,0,0,0.86)';
     ctx.fillRect(0, 0, panelW, H);
     ctx.strokeStyle = '#2b2b2b';
     ctx.strokeRect(0, 0, panelW, H);
 
-    const lines = [
-      'CONTROLS',
-      '',
-      'A  - ROTATE LEFT',
-      'D  - ROTATE RIGHT',
-      'W  - THROTTLE UP',
-      'S  - THROTTLE DOWN',
-      'SPACE - START / TOGGLE TRAY',
-      '8  - ARM SEG1 UP',
-      '2  - ARM SEG1 DOWN',
-      '7  - ARM SEG2 UP',
-      '1  - ARM SEG2 DOWN',
-      '4  - BASE CCW',
-      '6  - BASE CW',
-      '9  - CLAW CLOSE',
-      '3  - CLAW OPEN',
-      'H  - HELP',
-      'ESC - PAUSE',
-    ];
+    const padX = 22;
+    const padY = 20;
+    const maxW = panelW - padX * 2;
+    const nonEmpty = lines.filter(Boolean);
 
-    let y = 52;
+    let bodySize = 28;
+    for (; bodySize >= 12; bodySize -= 1) {
+      const titleSize = Math.round(bodySize * 1.45);
+      const lineGap = Math.max(4, Math.round(bodySize * 0.45));
+      const rowH = Math.round(bodySize * 1.28);
+      const titleH = Math.round(titleSize * 1.05);
+      const totalRowsH = titleH + lineGap + lines.length * rowH;
+      const maxLine = nonEmpty.reduce((m, line) => {
+        ctx.font = `bold ${bodySize}px Segoe UI`;
+        return Math.max(m, ctx.measureText(line).width);
+      }, 0);
+      ctx.font = `bold ${titleSize}px Segoe UI`;
+      const titleW = ctx.measureText(title).width;
+      if (totalRowsH <= H - padY * 2 && Math.max(maxLine, titleW) <= maxW) break;
+    }
+
+    const titleSize = Math.round(bodySize * 1.45);
+    const lineGap = Math.max(4, Math.round(bodySize * 0.45));
+    const rowH = Math.round(bodySize * 1.28);
+
+    let y = padY + titleSize;
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `bold ${titleSize}px Segoe UI`;
+    ctx.fillText(title, padX, y);
+    y += lineGap + Math.round(bodySize * 0.25);
+
+    ctx.font = `bold ${bodySize}px Segoe UI`;
     for (const line of lines) {
-      if (!line) { y += 14; continue; }
-      if (line === 'CONTROLS') {
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 40px Segoe UI';
-        ctx.fillText(line, 24, y);
-        y += 48;
-      } else {
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 24px Segoe UI';
-        ctx.fillText(line, 24, y);
-        y += 36;
-      }
+      y += rowH;
+      if (!line) continue;
+      ctx.fillText(line, padX, y);
     }
   }
 
@@ -1425,7 +1433,23 @@
     if (game.state === 'READY') {
       ctx.fillStyle = 'rgba(0,0,0,0.42)';
       ctx.fillRect(0, 0, W, H);
-      drawReadyControlsPanel();
+      drawLeftInfoPanel('CONTROLS', [
+        'A  - ROTATE LEFT',
+        'D  - ROTATE RIGHT',
+        'W  - THROTTLE UP',
+        'S  - THROTTLE DOWN',
+        'SPACE - START / TOGGLE TRAY',
+        '8  - ARM SEG1 UP',
+        '2  - ARM SEG1 DOWN',
+        '7  - ARM SEG2 UP',
+        '1  - ARM SEG2 DOWN',
+        '4  - BASE CCW',
+        '6  - BASE CW',
+        '9  - CLAW CLOSE',
+        '3  - CLAW OPEN',
+        'H  - HELP / PAUSE',
+        'ESC - PAUSE',
+      ]);
       ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 54px Segoe UI';
       ctx.fillText('SPACE RECYCLE HERO', W * 0.44, H * 0.42);
@@ -1437,17 +1461,19 @@
     drawBottomConsole();
 
     if (game.showHelp && game.state !== 'READY') {
-      ctx.fillStyle = 'rgba(0,0,0,0.48)';
-      ctx.fillRect(14, H - 168, 470, 150);
-      ctx.strokeStyle = '#6b7ea8';
-      ctx.strokeRect(14, H - 168, 470, 150);
-      ctx.fillStyle = '#dce7ff';
-      ctx.font = '14px Segoe UI';
-      const y0 = H - 142;
-      ctx.fillText('A/D rotate | W/S throttle ramp (persistent) | 8/2 seg1 | 7/1 seg2 | 4/6 base | 9 close | 3 open', 24, y0);
-      ctx.fillText('Safe landing: skids only, low speed, upright. Hull/cargo impact = crash.', 24, y0 + 26);
-      ctx.fillText('Land on REFUEL pads to refill. Land on RECYCLE pads to deliver tray cargo.', 24, y0 + 52);
-      ctx.fillText('H: toggle help | Esc: pause', 24, y0 + 78);
+      drawLeftInfoPanel('HELP', [
+        'A / D  - ROTATE SHIP',
+        'W / S  - THROTTLE UP / DOWN',
+        'SPACE  - TOGGLE TRAY OPEN/CLOSED',
+        '8 / 2  - ARM SEGMENT 1 UP / DOWN',
+        '7 / 1  - ARM SEGMENT 2 UP / DOWN',
+        '4 / 6  - ARM BASE CCW / CW',
+        '9 / 3  - CLAW CLOSE / OPEN',
+        'SAFE LANDING: SKIDS ONLY, LOW SPEED',
+        'LAND ON REFUEL PAD TO REFILL FUEL',
+        'LAND ON RECYCLE PAD TO DELIVER CARGO',
+        'H  - CLOSE HELP AND RESUME',
+      ]);
     }
   }
 
