@@ -1311,7 +1311,7 @@
     const attitudePanelW = gaugeSize + 32;
     const attitudeX = fuelX + barW + gap;
     const gx = attitudeX + attitudePanelW / 2;
-    const gy = panelY + panelH / 2;
+    const gy = panelY + panelH / 2 + 10;
     ctx.fillStyle = '#000';
     ctx.fillRect(attitudeX, panelY, attitudePanelW, panelH);
     ctx.strokeStyle = '#0b5';
@@ -1332,7 +1332,7 @@
     ctx.restore();
     ctx.fillStyle = '#7dff9c';
     ctx.font = 'bold 13px Segoe UI';
-    ctx.fillText('ATTITUDE', gx - 30, panelY + 18);
+    ctx.fillText('ATTITUDE', gx - 30, panelY + 16);
 
     const dX = attitudeX + attitudePanelW + gap;
     const totalW = Math.max(280, W - dX - pad);
@@ -1433,6 +1433,7 @@
     if (game.state === 'READY') {
       ctx.fillStyle = 'rgba(0,0,0,0.42)';
       ctx.fillRect(0, 0, W, H);
+      const panelW = Math.max(360, Math.floor(W * 0.34));
       drawLeftInfoPanel('CONTROLS', [
         'A  - ROTATE LEFT',
         'D  - ROTATE RIGHT',
@@ -1450,12 +1451,31 @@
         'H  - HELP / PAUSE',
         'ESC - PAUSE',
       ]);
+
+      // Responsive right-side READY heading/subheading that always fits window size.
+      const rightX = panelW + 26;
+      const rightW = Math.max(180, W - rightX - 24);
+      const gameplayH = getGameplayHeight();
+      const titleY = gameplayH * 0.42;
+      const subY = gameplayH * 0.52;
+
+      let titleSize = Math.min(56, Math.max(22, Math.round(gameplayH * 0.09)));
+      for (; titleSize >= 18; titleSize -= 1) {
+        ctx.font = `bold ${titleSize}px Segoe UI`;
+        if (ctx.measureText('SPACE RECYCLE HERO').width <= rightW) break;
+      }
+      let subSize = Math.min(30, Math.max(14, Math.round(gameplayH * 0.05)));
+      for (; subSize >= 12; subSize -= 1) {
+        ctx.font = `bold ${subSize}px Segoe UI`;
+        if (ctx.measureText('PRESS SPACE TO START').width <= rightW) break;
+      }
+
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 54px Segoe UI';
-      ctx.fillText('SPACE RECYCLE HERO', W * 0.44, H * 0.42);
-      ctx.font = 'bold 28px Segoe UI';
+      ctx.font = `bold ${titleSize}px Segoe UI`;
+      ctx.fillText('SPACE RECYCLE HERO', rightX, titleY);
+      ctx.font = `bold ${subSize}px Segoe UI`;
       ctx.fillStyle = '#9ce8ff';
-      ctx.fillText('PRESS SPACE TO START', W * 0.48, H * 0.5);
+      ctx.fillText('PRESS SPACE TO START', rightX, subY);
     }
 
     drawBottomConsole();
