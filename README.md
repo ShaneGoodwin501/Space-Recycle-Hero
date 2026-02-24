@@ -19,9 +19,9 @@ No build step is required. The game is pure static HTML/CSS/JS.
 
 ## Optional PHP usage
 
-This project does **not require PHP** to run. Apache + static hosting is enough.
+This project now includes a PHP endpoint (`leaderboard.php`) and server-side JSON storage (`leaderboard.json`) for persistent shared leaderboard scores.
 
-If you want score persistence later, you can add a `save_score.php` endpoint with file locking, but this build keeps scoring local and in-memory.
+For shared leaderboard support, ensure PHP is enabled in Apache (or run with `php -S`).
 
 ## Controls
 
