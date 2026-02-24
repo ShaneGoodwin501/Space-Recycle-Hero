@@ -57,6 +57,20 @@
     canvas.style.height = `${H}px`;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
+
+  function getConsoleHeight() {
+    const percentCap = H < 700 ? 0.22 : 0.28;
+    return Math.max(72, Math.min(CONFIG.consoleHeightPx, Math.floor(H * percentCap)));
+  }
+
+  function getGameplayHeight() {
+    return Math.max(120, H - getConsoleHeight());
+  }
+
+  function getViewCenterY() {
+    return getGameplayHeight() * 0.5;
+  }
+
   window.addEventListener('resize', resize);
   resize();
 
@@ -894,6 +908,7 @@
 
   function updateCamera(dt) {
     const viewW = W / CONFIG.METER_TO_PX;
+    const viewH = getGameplayHeight() / CONFIG.METER_TO_PX;
     const leftBound = game.camera.x - viewW * 0.25;
     const rightBound = game.camera.x + viewW * 0.25;
     let targetX = game.camera.x;
@@ -906,16 +921,17 @@
     const maxX = CONFIG.worldWidth - viewW * 0.5;
     targetX = clamp(targetX, minX, maxX);
 
-    const targetY = ship.y - 5.2;
+    const targetY = ship.y - Math.max(3.6, viewH * 0.18);
     game.camera.x = lerp(game.camera.x, targetX, clamp(CONFIG.cameraSmooth * dt, 0, 1));
     game.camera.y = lerp(game.camera.y, targetY, clamp(6 * dt, 0, 1));
 
     const shipScreenX = (ship.x - game.camera.x) * CONFIG.METER_TO_PX + W / 2;
-    const shipScreenY = (ship.y - game.camera.y) * CONFIG.METER_TO_PX + H / 2;
+    const gameplayH = getGameplayHeight();
+    const shipScreenY = (ship.y - game.camera.y) * CONFIG.METER_TO_PX + getViewCenterY();
     if (shipScreenX < W * 0.1 || shipScreenX > W * 0.9) {
       game.camera.x = ship.x;
     }
-    if (shipScreenY < H * 0.15 || shipScreenY > H * 0.85) {
+    if (shipScreenY < gameplayH * 0.12 || shipScreenY > gameplayH * 0.88) {
       game.camera.y = targetY;
     }
   }
@@ -935,7 +951,7 @@
 
   function toScreen(wx, wy) {
     const px = (wx - game.camera.x) * CONFIG.METER_TO_PX + W / 2;
-    const py = (wy - game.camera.y) * CONFIG.METER_TO_PX + H / 2;
+    const py = (wy - game.camera.y) * CONFIG.METER_TO_PX + getViewCenterY();
     return { x: px, y: py };
   }
 
@@ -980,6 +996,7 @@
   }
 
   function drawTerrainAndPads() {
+    const gameplayH = getGameplayHeight();
     ctx.beginPath();
     const first = toScreen(terrain.points[0].x, terrain.points[0].y);
     ctx.moveTo(first.x, first.y);
@@ -989,8 +1006,8 @@
     }
     const last = terrain.points[terrain.points.length - 1];
     const end = toScreen(last.x, last.y);
-    ctx.lineTo(end.x, H + 30);
-    ctx.lineTo(first.x, H + 30);
+    ctx.lineTo(end.x, gameplayH + 30);
+    ctx.lineTo(first.x, gameplayH + 30);
     ctx.closePath();
     ctx.fillStyle = '#3c3f4a';
     ctx.fill();
@@ -1247,7 +1264,7 @@
 
 
   function drawBottomConsole() {
-    const h = Math.min(CONFIG.consoleHeightPx, Math.floor(H * 0.28));
+    const h = getConsoleHeight();
     const y = H - h;
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(0, y, W, h);
