@@ -1200,8 +1200,12 @@
     const p2 = { x: p1.x + Math.cos(a1) * seg2Len, y: p1.y + Math.sin(a1) * seg2Len };
     const a2 = a1 + (ship.seg2Angle - Math.PI / 2);
 
+    const armThickness = 6.4;
+    const jointDiameter = armThickness * 1.3;
+    const jointRadiusPx = jointDiameter * 0.5;
+
     ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 6.4;
+    ctx.lineWidth = armThickness;
     ctx.beginPath();
     ctx.moveTo(base.x * m, base.y * m);
     ctx.lineTo(p1.x * m, p1.y * m);
@@ -1230,8 +1234,10 @@
     ctx.closePath();
     ctx.fill();
 
+    const clawRoots = [];
     function drawFinger(sign) {
       const root = { x: tip.x + n.x * open * sign, y: tip.y + n.y * open * sign };
+      clawRoots.push(root);
       const pA = { x: root.x + forward.x * 0.44, y: root.y + forward.y * 0.44 };
       const pB = { x: root.x + n.x * 0.24 * sign, y: root.y + n.y * 0.24 * sign };
       ctx.fillStyle = '#ffffff';
@@ -1244,6 +1250,19 @@
     }
     drawFinger(1);
     drawFinger(-1);
+
+    // Joint circles for all arm/claw joints (30% thicker than arm thickness).
+    function drawJoint(localPoint) {
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(localPoint.x * m, localPoint.y * m, jointRadiusPx, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    drawJoint(base);
+    drawJoint(p1);
+    drawJoint(p2);
+    drawJoint(tip);
+    clawRoots.forEach(drawJoint);
 
     ctx.restore();
   }
