@@ -659,8 +659,14 @@
     ship.x += ship.vx * dt;
     ship.y += ship.vy * dt;
 
-    ship.x = clamp(ship.x, 0.8, CONFIG.worldWidth - 0.8);
-    if (ship.x <= 0.81 || ship.x >= CONFIG.worldWidth - 0.81) ship.vx = 0;
+    const horizontalMargin = shipShape.hullRadius;
+    const leftWall = horizontalMargin;
+    const rightWall = CONFIG.worldWidth - horizontalMargin;
+    const touchedLeftWall = ship.x <= leftWall;
+    const touchedRightWall = ship.x >= rightWall;
+    ship.x = clamp(ship.x, leftWall, rightWall);
+    if (touchedLeftWall && ship.vx < 0) ship.vx = 0;
+    if (touchedRightWall && ship.vx > 0) ship.vx = 0;
 
     // Stop at altitude/world edges to prevent off-screen glitch behavior.
     const tm = terrainMetrics();
@@ -688,8 +694,10 @@
       }
     }
 
-    const skidLContact = skidL.y >= terrainY(skidL.x);
-    const skidRContact = skidR.y >= terrainY(skidR.x);
+    const skidLInBounds = skidL.x >= 0 && skidL.x <= CONFIG.worldWidth;
+    const skidRInBounds = skidR.x >= 0 && skidR.x <= CONFIG.worldWidth;
+    const skidLContact = skidLInBounds && skidL.y >= terrainY(skidL.x);
+    const skidRContact = skidRInBounds && skidR.y >= terrainY(skidR.x);
 
     const angleOk = Math.abs(ship.angle) < CONFIG.landingMaxAngleDeg * Math.PI / 180;
     const speed = Math.hypot(ship.vx, ship.vy);
@@ -725,6 +733,7 @@
     let hullHitTerrain = false;
     for (const p of shipShape.hullPoints) {
       const w = worldFromLocal(ship, p);
+      if (w.x < 0 || w.x > CONFIG.worldWidth) continue;
       if (w.y > terrainY(w.x) - 0.02) {
         hullHitTerrain = true;
         break;
