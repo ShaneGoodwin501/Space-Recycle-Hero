@@ -988,18 +988,19 @@
     const maxXRaw = CONFIG.worldWidth - viewW * 0.5;
     const minX = Math.min(minXRaw, maxXRaw);
     const maxX = Math.max(minXRaw, maxXRaw);
+    const maxLagMeters = viewW * 0.42;
+    const shipCameraDeltaX = ship.x - targetX;
+    if (Math.abs(shipCameraDeltaX) > maxLagMeters) {
+      targetX = ship.x - Math.sign(shipCameraDeltaX) * maxLagMeters;
+    }
     targetX = clamp(targetX, minX, maxX);
 
     const targetY = ship.y - Math.max(3.6, viewH * 0.18);
     game.camera.x = lerp(game.camera.x, targetX, clamp(CONFIG.cameraSmooth * dt, 0, 1));
     game.camera.y = lerp(game.camera.y, targetY, clamp(6 * dt, 0, 1));
 
-    const shipScreenX = (ship.x - game.camera.x) * CONFIG.METER_TO_PX + W / 2;
     const gameplayH = getGameplayHeight();
     const shipScreenY = (ship.y - game.camera.y) * CONFIG.METER_TO_PX + getViewCenterY();
-    if (shipScreenX < W * 0.1 || shipScreenX > W * 0.9) {
-      game.camera.x = clamp(ship.x, minX, maxX);
-    }
     if (shipScreenY < gameplayH * 0.12 || shipScreenY > gameplayH * 0.88) {
       game.camera.y = targetY;
     }
