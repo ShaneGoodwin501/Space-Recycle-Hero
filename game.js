@@ -272,11 +272,33 @@
   const cargoShapes = ['rectangle', 'triangle', 'circle', 'trapezoid', 'diamond', 'hex'];
 
   let cargos = [];
+  function xOverlapsAnyPad(x, radius = 0) {
+    return terrain.pads.some((pad) => {
+      const half = pad.w * 0.5;
+      return x + radius > pad.x - half && x - radius < pad.x + half;
+    });
+  }
+
   function spawnCargo() {
     cargos = [];
     for (let i = 0; i < CONFIG.cargoCount; i++) {
       const type = cargoTypes[Math.floor(Math.random() * cargoTypes.length)];
-      const x = 20 + Math.random() * (CONFIG.worldWidth - 30);
+      let x = 20 + Math.random() * (CONFIG.worldWidth - 30);
+      let attempts = 0;
+      while (xOverlapsAnyPad(x, type.r + 0.25) && attempts < 80) {
+        x = 20 + Math.random() * (CONFIG.worldWidth - 30);
+        attempts += 1;
+      }
+
+      if (xOverlapsAnyPad(x, type.r + 0.25)) {
+        const fallback = terrain.pads
+          .map((pad) => [pad.x - pad.w * 0.5 - type.r - 0.35, pad.x + pad.w * 0.5 + type.r + 0.35])
+          .flat()
+          .map((candidate) => clamp(candidate, 20 + type.r, CONFIG.worldWidth - 10 - type.r))
+          .find((candidate) => !xOverlapsAnyPad(candidate, type.r + 0.25));
+        if (typeof fallback === 'number') x = fallback;
+      }
+
       const y = terrainY(x) - type.r - Math.random() * 0.35;
       const hue = Math.floor((i * 37 + Math.random() * 25) % 360);
       cargos.push({
