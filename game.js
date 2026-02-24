@@ -75,7 +75,7 @@
   resize();
 
   const keys = new Set();
-  const blocked = new Set(['KeyW','KeyA','KeyS','KeyD','Numpad1','Numpad2','Numpad3','Numpad4','Numpad6','Numpad7','Numpad8','Numpad9','Digit1','Digit2','Digit3','Digit4','Digit6','Digit7','Digit8','Digit9','Space','Escape','KeyH']);
+  const blocked = new Set(['KeyW','KeyA','KeyS','KeyD','KeyI','KeyO','KeyJ','KeyK','Comma','Period','Numpad3','Numpad9','Digit3','Digit9','Space','Escape','KeyH']);
   function unlockAudioFromUserGesture() {
     initAudio();
     if (game.audio?.ctx && game.audio.ctx.state !== 'running') game.audio.ctx.resume();
@@ -451,9 +451,9 @@
 
     const playing = game.state === 'PLAYING' && !game.paused;
 
-    const armMoving = keys.has('Numpad8') || keys.has('Digit8') || keys.has('Numpad2') || keys.has('Digit2') ||
-      keys.has('Numpad7') || keys.has('Digit7') || keys.has('Numpad1') || keys.has('Digit1') ||
-      keys.has('Numpad4') || keys.has('Digit4') || keys.has('Numpad6') || keys.has('Digit6') ||
+    const armMoving = keys.has('KeyI') || keys.has('KeyO') ||
+      keys.has('Comma') || keys.has('Period') ||
+      keys.has('KeyJ') || keys.has('KeyK') ||
       keys.has('Numpad9') || keys.has('Digit9') || keys.has('Numpad3') || keys.has('Digit3');
 
     const targetRumble = playing ? Math.max(0, ship.throttle) * 0.104 : 0;
@@ -565,15 +565,15 @@
     if (keys.has('KeyW')) ship.throttle = clamp(ship.throttle + CONFIG.throttleRampPerSec * dt, 0, 1);
     if (keys.has('KeyS')) ship.throttle = clamp(ship.throttle - CONFIG.throttleRampPerSec * dt, 0, 1);
 
-    const num = (a, b) => keys.has(a) || keys.has(b);
-    if (num('Numpad4','Digit4')) ship.baseAngle -= CONFIG.baseRate * dt;
-    if (num('Numpad6','Digit6')) ship.baseAngle += CONFIG.baseRate * dt;
-    if (num('Numpad8','Digit8')) ship.seg1Angle += CONFIG.seg1Rate * dt;
-    if (num('Numpad2','Digit2')) ship.seg1Angle -= CONFIG.seg1Rate * dt;
-    if (num('Numpad7','Digit7')) ship.seg2Angle += CONFIG.seg2Rate * dt;
-    if (num('Numpad1','Digit1')) ship.seg2Angle -= CONFIG.seg2Rate * dt;
-    if (num('Numpad9','Digit9')) ship.clawOpen = clamp(ship.clawOpen - CONFIG.clawRate * dt, 0, 1);
-    if (num('Numpad3','Digit3')) ship.clawOpen = clamp(ship.clawOpen + CONFIG.clawRate * dt, 0, 1);
+    const either = (a, b) => keys.has(a) || keys.has(b);
+    if (keys.has('KeyJ')) ship.baseAngle -= CONFIG.baseRate * dt;
+    if (keys.has('KeyK')) ship.baseAngle += CONFIG.baseRate * dt;
+    if (keys.has('KeyI')) ship.seg1Angle += CONFIG.seg1Rate * dt;
+    if (keys.has('KeyO')) ship.seg1Angle -= CONFIG.seg1Rate * dt;
+    if (keys.has('Comma')) ship.seg2Angle += CONFIG.seg2Rate * dt;
+    if (keys.has('Period')) ship.seg2Angle -= CONFIG.seg2Rate * dt;
+    if (either('Numpad9','Digit9')) ship.clawOpen = clamp(ship.clawOpen - CONFIG.clawRate * dt, 0, 1);
+    if (either('Numpad3','Digit3')) ship.clawOpen = clamp(ship.clawOpen + CONFIG.clawRate * dt, 0, 1);
 
     ship.baseAngle = clamp(ship.baseAngle, -120 * Math.PI/180, 120 * Math.PI/180);
     // Segment joints are intentionally unbounded for full 360° continuous control.
@@ -1440,12 +1440,12 @@
         'W  - THROTTLE UP',
         'S  - THROTTLE DOWN',
         'SPACE - START / TOGGLE TRAY',
-        '8  - ARM SEG1 UP',
-        '2  - ARM SEG1 DOWN',
-        '7  - ARM SEG2 UP',
-        '1  - ARM SEG2 DOWN',
-        '4  - BASE CCW',
-        '6  - BASE CW',
+        'I  - ARM SEG1 UP',
+        'O  - ARM SEG1 DOWN',
+        ',  - ARM SEG2 UP',
+        '.  - ARM SEG2 DOWN',
+        'J  - BASE CCW',
+        'K  - BASE CW',
         '9  - CLAW CLOSE',
         '3  - CLAW OPEN',
         'H  - HELP / PAUSE',
@@ -1485,9 +1485,9 @@
         'A / D  - ROTATE SHIP',
         'W / S  - THROTTLE UP / DOWN',
         'SPACE  - TOGGLE TRAY OPEN/CLOSED',
-        '8 / 2  - ARM SEGMENT 1 UP / DOWN',
-        '7 / 1  - ARM SEGMENT 2 UP / DOWN',
-        '4 / 6  - ARM BASE CCW / CW',
+        'I / O  - ARM SEGMENT 1 UP / DOWN',
+        ', / .  - ARM SEGMENT 2 UP / DOWN',
+        'J / K  - ARM BASE CCW / CW',
         '9 / 3  - CLAW CLOSE / OPEN',
         'SAFE LANDING: SKIDS ONLY, LOW SPEED',
         'LAND ON REFUEL PAD TO REFILL FUEL',
