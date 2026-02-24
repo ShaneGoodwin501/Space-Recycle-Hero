@@ -456,15 +456,15 @@
       keys.has('Numpad4') || keys.has('Digit4') || keys.has('Numpad6') || keys.has('Digit6') ||
       keys.has('Numpad9') || keys.has('Digit9') || keys.has('Numpad3') || keys.has('Digit3');
 
-    const targetRumble = playing ? Math.max(0, ship.throttle) * 0.08 : 0;
+    const targetRumble = playing ? Math.max(0, ship.throttle) * 0.104 : 0;
     a.rumbleGain.gain.setTargetAtTime(targetRumble, t, 0.05);
     a.rumble.frequency.setTargetAtTime(52 + ship.throttle * 35, t, 0.05);
 
-    const targetRocketTone = playing ? Math.max(0, ship.throttle) * 0.05 : 0;
+    const targetRocketTone = playing ? Math.max(0, ship.throttle) * 0.065 : 0;
     a.rocketToneGain.gain.setTargetAtTime(targetRocketTone, t, 0.04);
     a.rocketTone.frequency.setTargetAtTime(95 + ship.throttle * 120, t, 0.05);
 
-    const targetHydro = (playing && armMoving) ? 0.055 : 0;
+    const targetHydro = (playing && armMoving) ? 0.0715 : 0;
     a.hydroGain.gain.setTargetAtTime(targetHydro, t, 0.02);
     a.hydro.frequency.setTargetAtTime(180 + Math.abs(Math.sin(t * 18)) * 180, t, 0.015);
 
