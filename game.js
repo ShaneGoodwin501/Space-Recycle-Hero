@@ -983,8 +983,10 @@
     if (ship.x < leftBound) targetX = ship.x + viewW * 0.25;
     if (ship.x > rightBound) targetX = ship.x - viewW * 0.25;
 
-    const minX = viewW * 0.5;
-    const maxX = CONFIG.worldWidth - viewW * 0.5;
+    const minXRaw = viewW * 0.5;
+    const maxXRaw = CONFIG.worldWidth - viewW * 0.5;
+    const minX = Math.min(minXRaw, maxXRaw);
+    const maxX = Math.max(minXRaw, maxXRaw);
     targetX = clamp(targetX, minX, maxX);
 
     const targetY = ship.y - Math.max(3.6, viewH * 0.18);
@@ -995,7 +997,7 @@
     const gameplayH = getGameplayHeight();
     const shipScreenY = (ship.y - game.camera.y) * CONFIG.METER_TO_PX + getViewCenterY();
     if (shipScreenX < W * 0.1 || shipScreenX > W * 0.9) {
-      game.camera.x = ship.x;
+      game.camera.x = clamp(ship.x, minX, maxX);
     }
     if (shipScreenY < gameplayH * 0.12 || shipScreenY > gameplayH * 0.88) {
       game.camera.y = targetY;
