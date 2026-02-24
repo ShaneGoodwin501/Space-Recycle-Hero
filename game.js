@@ -75,7 +75,7 @@
   resize();
 
   const keys = new Set();
-  const blocked = new Set(['KeyW','KeyA','KeyS','KeyD','KeyI','KeyO','KeyJ','KeyK','Comma','Period','Numpad3','Numpad9','Digit3','Digit9','Space','Escape','KeyH']);
+  const blocked = new Set(['KeyW','KeyA','KeyS','KeyD','KeyI','KeyO','KeyJ','KeyK','KeyN','KeyM','Numpad3','Numpad9','Digit3','Digit9','Space','Escape','KeyH']);
   function unlockAudioFromUserGesture() {
     initAudio();
     if (game.audio?.ctx && game.audio.ctx.state !== 'running') game.audio.ctx.resume();
@@ -452,19 +452,19 @@
     const playing = game.state === 'PLAYING' && !game.paused;
 
     const armMoving = keys.has('KeyI') || keys.has('KeyO') ||
-      keys.has('Comma') || keys.has('Period') ||
+      keys.has('KeyN') || keys.has('KeyM') ||
       keys.has('KeyJ') || keys.has('KeyK') ||
       keys.has('Numpad9') || keys.has('Digit9') || keys.has('Numpad3') || keys.has('Digit3');
 
-    const targetRumble = playing ? Math.max(0, ship.throttle) * 0.104 : 0;
+    const targetRumble = playing ? Math.max(0, ship.throttle) * 0.1352 : 0;
     a.rumbleGain.gain.setTargetAtTime(targetRumble, t, 0.05);
     a.rumble.frequency.setTargetAtTime(52 + ship.throttle * 35, t, 0.05);
 
-    const targetRocketTone = playing ? Math.max(0, ship.throttle) * 0.065 : 0;
+    const targetRocketTone = playing ? Math.max(0, ship.throttle) * 0.0845 : 0;
     a.rocketToneGain.gain.setTargetAtTime(targetRocketTone, t, 0.04);
     a.rocketTone.frequency.setTargetAtTime(95 + ship.throttle * 120, t, 0.05);
 
-    const targetHydro = (playing && armMoving) ? 0.0715 : 0;
+    const targetHydro = (playing && armMoving) ? 0.09295 : 0;
     a.hydroGain.gain.setTargetAtTime(targetHydro, t, 0.02);
     a.hydro.frequency.setTargetAtTime(180 + Math.abs(Math.sin(t * 18)) * 180, t, 0.015);
 
@@ -568,10 +568,10 @@
     const either = (a, b) => keys.has(a) || keys.has(b);
     if (keys.has('KeyJ')) ship.baseAngle -= CONFIG.baseRate * dt;
     if (keys.has('KeyK')) ship.baseAngle += CONFIG.baseRate * dt;
-    if (keys.has('KeyI')) ship.seg1Angle += CONFIG.seg1Rate * dt;
-    if (keys.has('KeyO')) ship.seg1Angle -= CONFIG.seg1Rate * dt;
-    if (keys.has('Comma')) ship.seg2Angle += CONFIG.seg2Rate * dt;
-    if (keys.has('Period')) ship.seg2Angle -= CONFIG.seg2Rate * dt;
+    if (keys.has('KeyI')) ship.seg1Angle -= CONFIG.seg1Rate * dt;
+    if (keys.has('KeyO')) ship.seg1Angle += CONFIG.seg1Rate * dt;
+    if (keys.has('KeyN')) ship.seg2Angle -= CONFIG.seg2Rate * dt;
+    if (keys.has('KeyM')) ship.seg2Angle += CONFIG.seg2Rate * dt;
     if (either('Numpad9','Digit9')) ship.clawOpen = clamp(ship.clawOpen - CONFIG.clawRate * dt, 0, 1);
     if (either('Numpad3','Digit3')) ship.clawOpen = clamp(ship.clawOpen + CONFIG.clawRate * dt, 0, 1);
 
@@ -1440,10 +1440,10 @@
         'W  - THROTTLE UP',
         'S  - THROTTLE DOWN',
         'SPACE - START / TOGGLE TRAY',
-        'I  - ARM SEG1 UP',
-        'O  - ARM SEG1 DOWN',
-        ',  - ARM SEG2 UP',
-        '.  - ARM SEG2 DOWN',
+        'O  - ARM SEG1 UP',
+        'I  - ARM SEG1 DOWN',
+        'M  - ARM SEG2 UP',
+        'N  - ARM SEG2 DOWN',
         'J  - BASE CCW',
         'K  - BASE CW',
         '9  - CLAW CLOSE',
@@ -1485,8 +1485,8 @@
         'A / D  - ROTATE SHIP',
         'W / S  - THROTTLE UP / DOWN',
         'SPACE  - TOGGLE TRAY OPEN/CLOSED',
-        'I / O  - ARM SEGMENT 1 UP / DOWN',
-        ', / .  - ARM SEGMENT 2 UP / DOWN',
+        'O / I  - ARM SEGMENT 1 UP / DOWN',
+        'M / N  - ARM SEGMENT 2 UP / DOWN',
         'J / K  - ARM BASE CCW / CW',
         '9 / 3  - CLAW CLOSE / OPEN',
         'SAFE LANDING: SKIDS ONLY, LOW SPEED',
