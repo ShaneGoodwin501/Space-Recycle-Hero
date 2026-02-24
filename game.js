@@ -626,6 +626,11 @@
 
   function updateShip(dt) {
     ship.invincibleTimer = Math.max(0, ship.invincibleTimer - dt);
+
+    const recyclePadUnderShip = terrain.pads.find((p) => p.kind === 'recycle' && Math.abs(ship.x - p.x) <= p.w * 0.45);
+    if (ship.landed && recyclePadUnderShip) {
+      ship.invincibleTimer = Math.max(ship.invincibleTimer, 0.2);
+    }
     const trayTarget = ship.trayExtended ? 1 : 0;
     ship.traySlide = lerp(ship.traySlide, trayTarget, clamp(8 * dt, 0, 1));
     const mass = shipMass();
@@ -729,6 +734,8 @@
 
     ship.landed = hasSkid && angleOk && speedOk && (verticalOk || ship.settleLock);
     if (ship.landed) {
+      const landingRecyclePad = terrain.pads.find((p) => p.kind === 'recycle' && Math.abs(ship.x - p.x) <= p.w * 0.45);
+      if (landingRecyclePad) ship.invincibleTimer = Math.max(ship.invincibleTimer, 0.2);
       ship.vy = Math.min(ship.vy, 0);
       ship.bounceCount = 0;
       ship.settleLock = true;
