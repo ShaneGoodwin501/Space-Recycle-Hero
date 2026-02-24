@@ -16,12 +16,13 @@
     fuelBurnBase: 0.08,
     fuelBurnByThrottle: 0.55,
 
-    landingMaxAngleDeg: 15,
+    landingMaxAngleDeg: 21,
     landingMaxVY: 2.0,
     landingMaxSpeed: 2.4,
     landingBounceVY: 3.4,
     landingCrashVY: 5.6,
     landingSettleBounces: 3,
+    impactRobustness: 1.4,
 
     clawRate: 0.7,
     baseRate: 95 * Math.PI / 180,
@@ -137,17 +138,39 @@
       }
     }
 
+    function padOverlapsExisting(cx, width, extraGap = 0.8) {
+      const half = width * 0.5 + extraGap;
+      return pads.some((pad) => {
+        const existingHalf = pad.w * 0.5 + extraGap;
+        return Math.abs(cx - pad.x) < half + existingHalf;
+      });
+    }
+
     for (let i = 0; i < 3; i++) {
       const x = 35 + i * 70 + (Math.random() * 8 - 4);
       const yPad = sampleHeightRaw(points, x) - 0.6;
       flattenAt(x, 6, yPad);
       pads.push({ kind: 'recycle', x, y: yPad, w: 11, h: 1.4 });
     }
+
+    const refuelTargets = [65, 175];
     for (let i = 0; i < 2; i++) {
-      const x = 65 + i * 110 + (Math.random() * 6 - 3);
+      const width = 10;
+      let x = refuelTargets[i] + (Math.random() * 6 - 3);
+      let attempts = 0;
+      while (padOverlapsExisting(x, width) && attempts < 40) {
+        x = refuelTargets[i] + (Math.random() * 28 - 14);
+        attempts += 1;
+      }
+      if (padOverlapsExisting(x, width)) {
+        const fallback = [18, 95, 150, 230]
+          .find((candidate) => !padOverlapsExisting(candidate, width)) ?? refuelTargets[i];
+        x = fallback;
+      }
+
       const yPad = sampleHeightRaw(points, x) - 0.4;
       flattenAt(x, 5.5, yPad);
-      pads.push({ kind: 'refuel', x, y: yPad, w: 10, h: 1.4 });
+      pads.push({ kind: 'refuel', x, y: yPad, w: width, h: 1.4 });
     }
 
     return { points, pads };
@@ -654,7 +677,7 @@
     if (ship.invincibleTimer <= 0) {
       for (const c of cargos) {
         if (c.scored || c.accepting || c.stored || c.grabbed || c.popping) continue;
-        if (Math.hypot(c.x - hullCenter.x, c.y - hullCenter.y) < c.r + shipShape.hullRadius * 0.8) {
+        if (Math.hypot(c.x - hullCenter.x, c.y - hullCenter.y) < c.r + shipShape.hullRadius * (0.8 / CONFIG.impactRobustness)) {
           return crashShip('hull-cargo');
         }
       }
@@ -692,7 +715,7 @@
       }
     }
 
-    if (hasSkid && Math.abs(ship.vy) > CONFIG.landingCrashVY) return crashShip('hard-impact');
+    if (hasSkid && Math.abs(ship.vy) > CONFIG.landingCrashVY * CONFIG.impactRobustness) return crashShip('hard-impact');
 
     let hullHitTerrain = false;
     for (const p of shipShape.hullPoints) {
@@ -702,7 +725,7 @@
         break;
       }
     }
-    if (hullHitTerrain && !hasSkid) return crashShip('hull-terrain');
+    if (hullHitTerrain && !hasSkid && Math.abs(ship.vy) > CONFIG.landingMaxVY * CONFIG.impactRobustness) return crashShip('hull-terrain');
 
     ship.landed = hasSkid && angleOk && speedOk && (verticalOk || ship.settleLock);
     if (ship.landed) {
