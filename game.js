@@ -75,7 +75,7 @@
   resize();
 
   const keys = new Set();
-  const blocked = new Set(['KeyW','KeyA','KeyS','KeyD','KeyI','KeyO','KeyJ','KeyK','KeyN','KeyM','Numpad3','Numpad9','Digit3','Digit9','Space','Escape','KeyH']);
+  const blocked = new Set(['KeyW','KeyA','KeyS','KeyD','KeyI','KeyO','KeyK','KeyL','KeyN','KeyM','Semicolon','Quote','Space','Escape','KeyH']);
   function unlockAudioFromUserGesture() {
     initAudio();
     if (game.audio?.ctx && game.audio.ctx.state !== 'running') game.audio.ctx.resume();
@@ -453,8 +453,8 @@
 
     const armMoving = keys.has('KeyI') || keys.has('KeyO') ||
       keys.has('KeyN') || keys.has('KeyM') ||
-      keys.has('KeyJ') || keys.has('KeyK') ||
-      keys.has('Numpad9') || keys.has('Digit9') || keys.has('Numpad3') || keys.has('Digit3');
+      keys.has('KeyK') || keys.has('KeyL') ||
+      keys.has('Semicolon') || keys.has('Quote');
 
     const targetRumble = playing ? Math.max(0, ship.throttle) * 0.1352 : 0;
     a.rumbleGain.gain.setTargetAtTime(targetRumble, t, 0.05);
@@ -565,15 +565,14 @@
     if (keys.has('KeyW')) ship.throttle = clamp(ship.throttle + CONFIG.throttleRampPerSec * dt, 0, 1);
     if (keys.has('KeyS')) ship.throttle = clamp(ship.throttle - CONFIG.throttleRampPerSec * dt, 0, 1);
 
-    const either = (a, b) => keys.has(a) || keys.has(b);
-    if (keys.has('KeyJ')) ship.baseAngle -= CONFIG.baseRate * dt;
-    if (keys.has('KeyK')) ship.baseAngle += CONFIG.baseRate * dt;
+    if (keys.has('KeyK')) ship.baseAngle -= CONFIG.baseRate * dt;
+    if (keys.has('KeyL')) ship.baseAngle += CONFIG.baseRate * dt;
     if (keys.has('KeyI')) ship.seg1Angle -= CONFIG.seg1Rate * dt;
     if (keys.has('KeyO')) ship.seg1Angle += CONFIG.seg1Rate * dt;
     if (keys.has('KeyN')) ship.seg2Angle -= CONFIG.seg2Rate * dt;
     if (keys.has('KeyM')) ship.seg2Angle += CONFIG.seg2Rate * dt;
-    if (either('Numpad9','Digit9')) ship.clawOpen = clamp(ship.clawOpen - CONFIG.clawRate * dt, 0, 1);
-    if (either('Numpad3','Digit3')) ship.clawOpen = clamp(ship.clawOpen + CONFIG.clawRate * dt, 0, 1);
+    if (keys.has('Semicolon')) ship.clawOpen = clamp(ship.clawOpen - CONFIG.clawRate * dt, 0, 1);
+    if (keys.has('Quote')) ship.clawOpen = clamp(ship.clawOpen + CONFIG.clawRate * dt, 0, 1);
 
     ship.baseAngle = clamp(ship.baseAngle, -120 * Math.PI/180, 120 * Math.PI/180);
     // Segment joints are intentionally unbounded for full 360° continuous control.
@@ -1444,10 +1443,10 @@
         'I  - ARM SEG1 DOWN',
         'M  - ARM SEG2 UP',
         'N  - ARM SEG2 DOWN',
-        'J  - BASE CCW',
-        'K  - BASE CW',
-        '9  - CLAW CLOSE',
-        '3  - CLAW OPEN',
+        'K  - BASE CCW',
+        'L  - BASE CW',
+        ';  - CLAW CLOSE',
+        "'  - CLAW OPEN",
         'H  - HELP / PAUSE',
         'ESC - PAUSE',
       ]);
@@ -1487,8 +1486,8 @@
         'SPACE  - TOGGLE TRAY OPEN/CLOSED',
         'O / I  - ARM SEGMENT 1 UP / DOWN',
         'M / N  - ARM SEGMENT 2 UP / DOWN',
-        'J / K  - ARM BASE CCW / CW',
-        '9 / 3  - CLAW CLOSE / OPEN',
+        'K / L  - ARM BASE CCW / CW',
+        "; / '  - CLAW CLOSE / OPEN",
         'SAFE LANDING: SKIDS ONLY, LOW SPEED',
         'LAND ON REFUEL PAD TO REFILL FUEL',
         'LAND ON RECYCLE PAD TO DELIVER CARGO',
