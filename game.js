@@ -16,17 +16,18 @@
     fuelBurnBase: 0.08,
     fuelBurnByThrottle: 0.55,
 
-    landingMaxAngleDeg: 15,
+    landingMaxAngleDeg: 21,
     landingMaxVY: 2.0,
     landingMaxSpeed: 2.4,
     landingBounceVY: 3.4,
     landingCrashVY: 5.6,
     landingSettleBounces: 3,
+    impactRobustness: 1.4,
 
     clawRate: 0.7,
-    baseRate: 95 * Math.PI / 180,
-    seg1Rate: 110 * Math.PI / 180,
-    seg2Rate: 110 * Math.PI / 180,
+    baseRate: 47.5 * Math.PI / 180,
+    seg1Rate: 55 * Math.PI / 180,
+    seg2Rate: 55 * Math.PI / 180,
 
     worldWidth: 260,
     terrainStep: 2,
@@ -85,6 +86,9 @@
     if (blocked.has(e.code)) e.preventDefault();
     keys.add(e.code);
     unlockAudioFromUserGesture();
+
+    if (handleNameEntryKey(e)) return;
+
     if (e.code === 'Space') {
       if (game.state === 'READY') startMission();
       else if (game.state === 'PLAYING') ship.trayExtended = !ship.trayExtended;
@@ -137,17 +141,39 @@
       }
     }
 
+    function padOverlapsExisting(cx, width, extraGap = 0.8) {
+      const half = width * 0.5 + extraGap;
+      return pads.some((pad) => {
+        const existingHalf = pad.w * 0.5 + extraGap;
+        return Math.abs(cx - pad.x) < half + existingHalf;
+      });
+    }
+
     for (let i = 0; i < 3; i++) {
       const x = 35 + i * 70 + (Math.random() * 8 - 4);
       const yPad = sampleHeightRaw(points, x) - 0.6;
       flattenAt(x, 6, yPad);
       pads.push({ kind: 'recycle', x, y: yPad, w: 11, h: 1.4 });
     }
+
+    const refuelTargets = [65, 175];
     for (let i = 0; i < 2; i++) {
-      const x = 65 + i * 110 + (Math.random() * 6 - 3);
+      const width = 10;
+      let x = refuelTargets[i] + (Math.random() * 6 - 3);
+      let attempts = 0;
+      while (padOverlapsExisting(x, width) && attempts < 40) {
+        x = refuelTargets[i] + (Math.random() * 28 - 14);
+        attempts += 1;
+      }
+      if (padOverlapsExisting(x, width)) {
+        const fallback = [18, 95, 150, 230]
+          .find((candidate) => !padOverlapsExisting(candidate, width)) ?? refuelTargets[i];
+        x = fallback;
+      }
+
       const yPad = sampleHeightRaw(points, x) - 0.4;
       flattenAt(x, 5.5, yPad);
-      pads.push({ kind: 'refuel', x, y: yPad, w: 10, h: 1.4 });
+      pads.push({ kind: 'refuel', x, y: yPad, w: width, h: 1.4 });
     }
 
     return { points, pads };
@@ -344,7 +370,132 @@
     explosions: [],
     crunchFx: [],
     audio: null,
+    leaderboard: [],
+    leaderboardError: '',
+    leaderboardLoaded: false,
+    nameEntry: { active: false, value: '', score: 0, submitting: false, message: '' },
   };
+
+
+  const MAX_LEADERBOARD_ENTRIES = 10;
+
+  function normalizePlayerName(raw) {
+    const stripped = String(raw || '')
+      .replace(/[^a-z0-9 _-]/gi, '')
+      .trim();
+    return stripped.slice(0, 10);
+  }
+
+  async function fetchLeaderboard() {
+    try {
+      const resp = await fetch('leaderboard.php', { cache: 'no-store' });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      if (!data || !Array.isArray(data.entries)) throw new Error('Invalid payload');
+      game.leaderboard = data.entries.slice(0, MAX_LEADERBOARD_ENTRIES);
+      game.leaderboardError = '';
+      game.leaderboardLoaded = true;
+    } catch (err) {
+      game.leaderboardError = 'Leaderboard unavailable';
+      game.leaderboardLoaded = true;
+    }
+  }
+
+  function scoreQualifiesForLeaderboard(score) {
+    if (score <= 0) return false;
+    if (game.leaderboard.length < MAX_LEADERBOARD_ENTRIES) return true;
+    const lowest = game.leaderboard[game.leaderboard.length - 1];
+    return score > (lowest?.score || 0);
+  }
+
+  async function submitLeaderboardScore(name, score) {
+    const player = normalizePlayerName(name);
+    if (!player || player.length > 10) return false;
+    try {
+      const resp = await fetch('leaderboard.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: player, score: Math.floor(score) }),
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      if (!data || !Array.isArray(data.entries)) throw new Error('Invalid payload');
+      game.leaderboard = data.entries.slice(0, MAX_LEADERBOARD_ENTRIES);
+      game.leaderboardError = '';
+      game.leaderboardLoaded = true;
+      return true;
+    } catch (err) {
+      game.leaderboardError = 'Unable to save score';
+      return false;
+    }
+  }
+
+
+  async function submitNameEntry() {
+    const entry = game.nameEntry;
+    if (!entry.active || entry.submitting) return;
+    const name = normalizePlayerName(entry.value);
+    if (!name) {
+      entry.message = 'Enter 1-10 characters';
+      return;
+    }
+
+    entry.submitting = true;
+    entry.message = 'Saving...';
+    const ok = await submitLeaderboardScore(name, entry.score);
+    entry.submitting = false;
+    entry.message = ok ? 'Saved!' : 'Save failed';
+
+    if (ok) {
+      entry.active = false;
+      entry.value = '';
+    }
+  }
+
+  function beginLeaderboardNameEntry() {
+    if (game.nameEntry.active) return;
+    if (!scoreQualifiesForLeaderboard(game.score)) return;
+    game.nameEntry.active = true;
+    game.nameEntry.value = '';
+    game.nameEntry.score = Math.floor(game.score);
+    game.nameEntry.submitting = false;
+    game.nameEntry.message = 'New high score! Enter your name';
+  }
+
+  function handleNameEntryKey(e) {
+    const entry = game.nameEntry;
+    if (!entry.active) return false;
+
+    if (e.code === 'Enter') {
+      e.preventDefault();
+      submitNameEntry();
+      return true;
+    }
+
+    if (e.code === 'Escape') {
+      e.preventDefault();
+      if (!entry.submitting) {
+        entry.active = false;
+        entry.value = '';
+      }
+      return true;
+    }
+
+    if (e.code === 'Backspace') {
+      e.preventDefault();
+      if (!entry.submitting) entry.value = entry.value.slice(0, -1);
+      return true;
+    }
+
+    if (!entry.submitting && e.key && e.key.length === 1) {
+      const next = normalizePlayerName(entry.value + e.key);
+      if (next.length <= 10) entry.value = next;
+      e.preventDefault();
+      return true;
+    }
+
+    return true;
+  }
 
 
   function randomizeWorld() {
@@ -550,6 +701,7 @@
     ship.cargoMass = 0;
     // eslint-disable-next-line no-console
     console.info('Crash:', reason);
+    beginLeaderboardNameEntry();
   }
 
   function respawnShip() {
@@ -578,6 +730,7 @@
     game.camera.x = ship.x;
     game.camera.y = ship.y - 6;
     game.state = 'READY';
+    fetchLeaderboard();
   }
 
   function updateInput(dt) {
@@ -603,6 +756,11 @@
 
   function updateShip(dt) {
     ship.invincibleTimer = Math.max(0, ship.invincibleTimer - dt);
+
+    const recyclePadUnderShip = terrain.pads.find((p) => p.kind === 'recycle' && Math.abs(ship.x - p.x) <= p.w * 0.45);
+    if (ship.landed && recyclePadUnderShip) {
+      ship.invincibleTimer = Math.max(ship.invincibleTimer, 0.2);
+    }
     const trayTarget = ship.trayExtended ? 1 : 0;
     ship.traySlide = lerp(ship.traySlide, trayTarget, clamp(8 * dt, 0, 1));
     const mass = shipMass();
@@ -631,8 +789,15 @@
     ship.x += ship.vx * dt;
     ship.y += ship.vy * dt;
 
-    ship.x = clamp(ship.x, 0.8, CONFIG.worldWidth - 0.8);
-    if (ship.x <= 0.81 || ship.x >= CONFIG.worldWidth - 0.81) ship.vx = 0;
+    const horizontalMargin = shipShape.hullRadius;
+    const leftWall = horizontalMargin;
+    const rightWall = CONFIG.worldWidth - horizontalMargin;
+    ship.x = clamp(ship.x, leftWall, rightWall);
+    const wallEpsilon = 1e-4;
+    const atLeftWall = ship.x <= leftWall + wallEpsilon;
+    const atRightWall = ship.x >= rightWall - wallEpsilon;
+    if (atLeftWall && ship.vx < 0) ship.vx = 0;
+    if (atRightWall && ship.vx > 0) ship.vx = 0;
 
     // Stop at altitude/world edges to prevent off-screen glitch behavior.
     const tm = terrainMetrics();
@@ -654,14 +819,16 @@
     if (ship.invincibleTimer <= 0) {
       for (const c of cargos) {
         if (c.scored || c.accepting || c.stored || c.grabbed || c.popping) continue;
-        if (Math.hypot(c.x - hullCenter.x, c.y - hullCenter.y) < c.r + shipShape.hullRadius * 0.8) {
+        if (Math.hypot(c.x - hullCenter.x, c.y - hullCenter.y) < c.r + shipShape.hullRadius * (0.8 / CONFIG.impactRobustness)) {
           return crashShip('hull-cargo');
         }
       }
     }
 
-    const skidLContact = skidL.y >= terrainY(skidL.x);
-    const skidRContact = skidR.y >= terrainY(skidR.x);
+    const skidLInBounds = skidL.x >= 0 && skidL.x <= CONFIG.worldWidth;
+    const skidRInBounds = skidR.x >= 0 && skidR.x <= CONFIG.worldWidth;
+    const skidLContact = skidLInBounds && skidL.y >= terrainY(skidL.x);
+    const skidRContact = skidRInBounds && skidR.y >= terrainY(skidR.x);
 
     const angleOk = Math.abs(ship.angle) < CONFIG.landingMaxAngleDeg * Math.PI / 180;
     const speed = Math.hypot(ship.vx, ship.vy);
@@ -692,20 +859,23 @@
       }
     }
 
-    if (hasSkid && Math.abs(ship.vy) > CONFIG.landingCrashVY) return crashShip('hard-impact');
+    if (hasSkid && Math.abs(ship.vy) > CONFIG.landingCrashVY * CONFIG.impactRobustness) return crashShip('hard-impact');
 
     let hullHitTerrain = false;
     for (const p of shipShape.hullPoints) {
       const w = worldFromLocal(ship, p);
+      if (w.x < 0 || w.x > CONFIG.worldWidth) continue;
       if (w.y > terrainY(w.x) - 0.02) {
         hullHitTerrain = true;
         break;
       }
     }
-    if (hullHitTerrain && !hasSkid) return crashShip('hull-terrain');
+    if (hullHitTerrain && !hasSkid && Math.abs(ship.vy) > CONFIG.landingMaxVY * CONFIG.impactRobustness) return crashShip('hull-terrain');
 
     ship.landed = hasSkid && angleOk && speedOk && (verticalOk || ship.settleLock);
     if (ship.landed) {
+      const landingRecyclePad = terrain.pads.find((p) => p.kind === 'recycle' && Math.abs(ship.x - p.x) <= p.w * 0.45);
+      if (landingRecyclePad) ship.invincibleTimer = Math.max(ship.invincibleTimer, 0.2);
       ship.vy = Math.min(ship.vy, 0);
       ship.bounceCount = 0;
       ship.settleLock = true;
@@ -944,23 +1114,28 @@
     if (ship.x < leftBound) targetX = ship.x + viewW * 0.25;
     if (ship.x > rightBound) targetX = ship.x - viewW * 0.25;
 
-    const minX = viewW * 0.5;
-    const maxX = CONFIG.worldWidth - viewW * 0.5;
+    const minXRaw = viewW * 0.5;
+    const maxXRaw = CONFIG.worldWidth - viewW * 0.5;
+    const minX = Math.min(minXRaw, maxXRaw);
+    const maxX = Math.max(minXRaw, maxXRaw);
+    const maxLagMeters = viewW * 0.42;
+    const shipCameraDeltaX = ship.x - targetX;
+    if (Math.abs(shipCameraDeltaX) > maxLagMeters) {
+      targetX = ship.x - Math.sign(shipCameraDeltaX) * maxLagMeters;
+    }
     targetX = clamp(targetX, minX, maxX);
 
     const targetY = ship.y - Math.max(3.6, viewH * 0.18);
     game.camera.x = lerp(game.camera.x, targetX, clamp(CONFIG.cameraSmooth * dt, 0, 1));
     game.camera.y = lerp(game.camera.y, targetY, clamp(6 * dt, 0, 1));
 
-    const shipScreenX = (ship.x - game.camera.x) * CONFIG.METER_TO_PX + W / 2;
     const gameplayH = getGameplayHeight();
     const shipScreenY = (ship.y - game.camera.y) * CONFIG.METER_TO_PX + getViewCenterY();
-    if (shipScreenX < W * 0.1 || shipScreenX > W * 0.9) {
-      game.camera.x = ship.x;
-    }
     if (shipScreenY < gameplayH * 0.12 || shipScreenY > gameplayH * 0.88) {
       game.camera.y = targetY;
     }
+
+    game.camera.x = clamp(game.camera.x, minX, maxX);
   }
 
   function updateExplosions(dt) {
@@ -1224,7 +1399,8 @@
 
     const armThickness = 6.4;
     const jointDiameter = armThickness * 1.3;
-    const jointRadiusPx = jointDiameter * 0.5;
+    const jointRadiusPx = jointDiameter * 0.5 * 1.3;
+    const innerJointRadiusPx = jointRadiusPx * 0.5;
 
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = armThickness;
@@ -1256,10 +1432,8 @@
     ctx.closePath();
     ctx.fill();
 
-    const clawRoots = [];
     function drawFinger(sign) {
       const root = { x: tip.x + n.x * open * sign, y: tip.y + n.y * open * sign };
-      clawRoots.push(root);
       const pA = { x: root.x + forward.x * 0.44, y: root.y + forward.y * 0.44 };
       const pB = { x: root.x + n.x * 0.24 * sign, y: root.y + n.y * 0.24 * sign };
       ctx.fillStyle = '#ffffff';
@@ -1273,18 +1447,21 @@
     drawFinger(1);
     drawFinger(-1);
 
-    // Joint circles for all arm/claw joints (30% thicker than arm thickness).
+    // Joint circles for arm joints (30% larger than previous size).
     function drawJoint(localPoint) {
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = '#ff2f2f';
       ctx.beginPath();
       ctx.arc(localPoint.x * m, localPoint.y * m, jointRadiusPx, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(localPoint.x * m, localPoint.y * m, innerJointRadiusPx, 0, Math.PI * 2);
       ctx.fill();
     }
     drawJoint(base);
     drawJoint(p1);
     drawJoint(p2);
-    drawJoint(tip);
-    clawRoots.forEach(drawJoint);
 
     ctx.restore();
   }
@@ -1516,9 +1693,34 @@
       ctx.font = `bold ${subSize}px Segoe UI`;
       ctx.fillStyle = '#9ce8ff';
       ctx.fillText('PRESS SPACE TO START', rightX, subY);
+
+      const boardY = subY + Math.max(34, gameplayH * 0.08);
+      const boardLineH = Math.max(16, Math.round(gameplayH * 0.035));
+      ctx.fillStyle = '#ffe48a';
+      ctx.font = `bold ${Math.max(14, Math.round(boardLineH * 0.95))}px Segoe UI`;
+      ctx.fillText('TOP 10 LEADERBOARD', rightX, boardY);
+
+      const rows = game.leaderboard.slice(0, MAX_LEADERBOARD_ENTRIES);
+      ctx.font = `${Math.max(12, Math.round(boardLineH * 0.82))}px Consolas, monospace`;
+      ctx.fillStyle = '#e5f6ff';
+      for (let i = 0; i < MAX_LEADERBOARD_ENTRIES; i++) {
+        const entry = rows[i];
+        const y = boardY + (i + 1) * boardLineH;
+        const rank = `${i + 1}.`.padEnd(4, ' ');
+        const nm = (entry?.name || '---').padEnd(10, ' ').slice(0, 10);
+        const sc = String(entry?.score || 0).padStart(5, ' ');
+        ctx.fillText(`${rank}${nm} ${sc}`, rightX, y);
+      }
+
+      if (game.leaderboardError) {
+        ctx.fillStyle = '#ff9a9a';
+        ctx.font = `${Math.max(11, Math.round(boardLineH * 0.72))}px Segoe UI`;
+        ctx.fillText(game.leaderboardError, rightX, boardY + (MAX_LEADERBOARD_ENTRIES + 1.5) * boardLineH);
+      }
     }
 
     drawBottomConsole();
+
 
     if (game.showHelp && game.state !== 'READY') {
       drawLeftInfoPanel('HELP', [
@@ -1534,6 +1736,49 @@
         'LAND ON RECYCLE PAD TO DELIVER CARGO',
         'H  - CLOSE HELP AND RESUME',
       ]);
+    }
+
+    if (game.nameEntry.active) {
+      const boxW = Math.min(560, Math.floor(W * 0.75));
+      const boxH = 190;
+      const x = Math.floor((W - boxW) * 0.5);
+      const y = Math.floor((getGameplayHeight() - boxH) * 0.45);
+
+      ctx.fillStyle = 'rgba(0,0,0,0.72)';
+      ctx.fillRect(0, 0, W, getGameplayHeight());
+      ctx.fillStyle = '#151a29';
+      ctx.fillRect(x, y, boxW, boxH);
+      ctx.strokeStyle = '#9ce8ff';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x, y, boxW, boxH);
+
+      const entry = game.nameEntry;
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 26px Segoe UI';
+      ctx.fillText('NEW HIGH SCORE!', x + 20, y + 38);
+      ctx.font = '16px Segoe UI';
+      ctx.fillStyle = '#dbe9ff';
+      ctx.fillText(`Score: ${entry.score}`, x + 20, y + 62);
+      ctx.fillText('Enter name (max 10):', x + 20, y + 88);
+
+      const fieldW = boxW - 40;
+      const fieldY = y + 100;
+      ctx.fillStyle = '#0e1422';
+      ctx.fillRect(x + 20, fieldY, fieldW, 38);
+      ctx.strokeStyle = '#6ccfff';
+      ctx.strokeRect(x + 20, fieldY, fieldW, 38);
+
+      const displayName = (entry.value || '').slice(0, 10);
+      const cursor = Math.floor(performance.now() / 500) % 2 === 0 ? '|' : ' ';
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 22px Consolas, monospace';
+      ctx.fillText(displayName + (entry.submitting ? '' : cursor), x + 28, fieldY + 26);
+
+      ctx.font = '14px Segoe UI';
+      ctx.fillStyle = entry.message.includes('failed') ? '#ff9a9a' : '#9ce8ff';
+      ctx.fillText(entry.message || 'Press Enter to submit', x + 20, y + 158);
+      ctx.fillStyle = '#9fb5cf';
+      ctx.fillText('Enter = Submit, Backspace = Delete, Esc = Cancel', x + 20, y + 176);
     }
   }
 
@@ -1571,5 +1816,6 @@
     requestAnimationFrame(loop);
   }
 
+  fetchLeaderboard();
   requestAnimationFrame(loop);
 })();
