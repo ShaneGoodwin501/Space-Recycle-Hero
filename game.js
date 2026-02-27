@@ -40,6 +40,13 @@
 
     cargoCount: 51,
     consoleHeightPx: 150,
+
+    supplyShipIntervalSec: 36,
+    supplyDropsPerShip: 4,
+    trackDeployRate: 5.5,
+    trackDriveAccel: 4.8,
+    trackDriveMaxSpeed: 1.35,
+    landingGearRate: 5.2,
   };
 
   const canvas = document.getElementById('gameCanvas');
@@ -76,7 +83,7 @@
   resize();
 
   const keys = new Set();
-  const blocked = new Set(['KeyW','KeyA','KeyS','KeyD','KeyI','KeyO','KeyK','KeyL','KeyN','KeyM','Comma','Period','Space','Escape','KeyH']);
+  const blocked = new Set(['KeyW','KeyA','KeyS','KeyD','KeyI','KeyO','KeyK','KeyL','KeyN','KeyM','Comma','Period','Space','Escape','KeyH','KeyQ','KeyE']);
   function unlockAudioFromUserGesture() {
     initAudio();
     if (game.audio?.ctx && game.audio.ctx.state !== 'running') game.audio.ctx.resume();
@@ -87,15 +94,37 @@
     keys.add(e.code);
     unlockAudioFromUserGesture();
 
-    if (handleNameEntryKey(e)) return;
 
     if (e.code === 'Space') {
       if (game.state === 'READY') startMission();
       else if (game.state === 'PLAYING') ship.trayExtended = !ship.trayExtended;
     }
-    if (e.code === 'KeyH' && game.state === 'PLAYING') {
-      game.showHelp = !game.showHelp;
-      game.paused = game.showHelp;
+    if (e.code === 'KeyH') {
+      if (game.state === 'PLAYING') {
+        game.showHelp = !game.showHelp;
+        game.paused = game.showHelp;
+      } else if (game.state === 'READY') {
+        game.showHelp = !game.showHelp;
+      }
+    }
+    if (e.code === 'KeyE' && game.state === 'PLAYING') {
+      const tracksMode = ship.tracksExtended || ship.tracksDeploy > 0.05;
+      if (!tracksMode) {
+        ship.gearExtended = !ship.gearExtended;
+      }
+    }
+    if (e.code === 'KeyQ' && game.state === 'PLAYING') {
+      const canToggleOn = !ship.tracksExtended && ship.landed && ship.throttle < 0.02 && Math.hypot(ship.vx, ship.vy) < 0.45;
+      const canToggleOff = ship.tracksExtended && ship.landed && Math.hypot(ship.vx, ship.vy) < 0.9;
+      if (canToggleOn) {
+        ship.tracksExtended = true;
+        ship.throttle = 0;
+        ship.gearExtended = false;
+      } else if (canToggleOff) {
+        ship.tracksExtended = false;
+        ship.gearExtended = true;
+        ship.gearSafetyTimer = 1.2;
+      }
     }
     if (e.code === 'Escape' && game.state !== 'CRASHED' && game.state !== 'READY') {
       game.paused = !game.paused;
@@ -258,12 +287,27 @@
     invincibleTimer: 0,
     trayExtended: false,
     traySlide: 0,
+    tracksExtended: false,
+    tracksDeploy: 0,
+    gearExtended: false,
+    gearDeploy: 0,
+    gearSafetyTimer: 0,
   };
 
   function shipMass() {
     return ship.massBase + ship.cargoMass;
   }
 
+  function getSupportLocals() {
+    const gearExtra = shipShape.skidL.y * 0.3 * ship.gearDeploy;
+    const trackExtra = 0.16 * ship.tracksDeploy;
+    const unsupportedBlend = (1 - ship.gearDeploy) * (1 - ship.tracksDeploy);
+    const transitionDrop = 0.14 * unsupportedBlend;
+    return {
+      left: { x: shipShape.skidL.x, y: shipShape.skidL.y + gearExtra + trackExtra + transitionDrop },
+      right: { x: shipShape.skidR.x, y: shipShape.skidR.y + gearExtra + trackExtra + transitionDrop },
+    };
+  }
 
   function getTrayRect() {
     const slideOffset = (1 - ship.traySlide) * 1.15;
@@ -298,6 +342,40 @@
   const cargoShapes = ['rectangle', 'triangle', 'circle', 'trapezoid', 'diamond', 'hex'];
 
   let cargos = [];
+  let nextCargoId = 0;
+
+  function createCargoPiece(x, y, type, hue, shapeIndex = 0) {
+    return {
+      id: `c${nextCargoId++}`,
+      x, y,
+      vx: 0,
+      vy: 0,
+      angle: Math.random() * Math.PI,
+      av: 0,
+      r: type.r,
+      mass: type.mass,
+      points: type.points,
+      color: `hsl(${hue} 68% 68%)`,
+      accent: `hsl(${(hue + 180) % 360} 78% 36%)`,
+      type: type.name,
+      shape: cargoShapes[shapeIndex % cargoShapes.length],
+      grabbed: false,
+      stored: false,
+      scored: false,
+      accepting: false,
+      acceptedTimer: 0,
+      targetX: 0,
+      targetY: 0,
+      restTimer: 0,
+      localPos: { x: 0, y: 0 },
+      popDelay: 0,
+      popping: false,
+      ignoreTrayTimer: 0,
+      recyclePadX: 0,
+      recyclePadW: 0,
+      recycleLockTimer: 0,
+    };
+  }
   function xOverlapsAnyPad(x, radius = 0) {
     return terrain.pads.some((pad) => {
       const half = pad.w * 0.5;
@@ -307,6 +385,7 @@
 
   function spawnCargo() {
     cargos = [];
+    nextCargoId = 0;
     for (let i = 0; i < CONFIG.cargoCount; i++) {
       const type = cargoTypes[Math.floor(Math.random() * cargoTypes.length)];
       let x = 20 + Math.random() * (CONFIG.worldWidth - 30);
@@ -327,181 +406,123 @@
 
       const y = terrainY(x) - type.r - Math.random() * 0.35;
       const hue = Math.floor((i * 37 + Math.random() * 25) % 360);
-      cargos.push({
-        id: `c${i}`,
-        x, y,
-        vx: 0,
-        vy: 0,
-        angle: Math.random() * Math.PI,
-        av: 0,
-        r: type.r,
-        mass: type.mass,
-        points: type.points,
-        color: `hsl(${hue} 68% 68%)`,
-        accent: `hsl(${(hue + 180) % 360} 78% 36%)`,
-        type: type.name,
-        shape: cargoShapes[i % cargoShapes.length],
-        grabbed: false,
-        stored: false,
-        scored: false,
-        accepting: false,
-        acceptedTimer: 0,
-        targetX: 0,
-        targetY: 0,
-        restTimer: 0,
-        localPos: { x: 0, y: 0 },
-        popDelay: 0,
-        popping: false,
-        ignoreTrayTimer: 0,
-        recyclePadX: 0,
-        recyclePadW: 0,
-        recycleLockTimer: 0,
-      });
+      cargos.push(createCargoPiece(x, y, type, hue, i));
     }
   }
   spawnCargo();
 
   const game = {
     score: 0,
-    showHelp: true,
+    showHelp: false,
     paused: false,
     state: 'READY',
     camera: { x: ship.x, y: ship.y - 6 },
     explosions: [],
     crunchFx: [],
     audio: null,
-    leaderboard: [],
-    leaderboardError: '',
-    leaderboardLoaded: false,
-    nameEntry: { active: false, value: '', score: 0, submitting: false, message: '' },
+    supplyShips: [],
+    supplySpawnTimer: CONFIG.supplyShipIntervalSec,
   };
 
 
-  const MAX_LEADERBOARD_ENTRIES = 10;
 
-  function normalizePlayerName(raw) {
-    const stripped = String(raw || '')
-      .replace(/[^a-z0-9 _-]/gi, '')
-      .trim();
-    return stripped.slice(0, 10);
-  }
 
-  async function fetchLeaderboard() {
-    try {
-      const resp = await fetch('leaderboard.php', { cache: 'no-store' });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = await resp.json();
-      if (!data || !Array.isArray(data.entries)) throw new Error('Invalid payload');
-      game.leaderboard = data.entries.slice(0, MAX_LEADERBOARD_ENTRIES);
-      game.leaderboardError = '';
-      game.leaderboardLoaded = true;
-    } catch (err) {
-      game.leaderboardError = 'Leaderboard unavailable';
-      game.leaderboardLoaded = true;
+  function pickDropXAvoidPads(preferredX, radius, margin = 0.55) {
+    const clamped = clamp(preferredX, 2 + radius, CONFIG.worldWidth - 2 - radius);
+    if (!xOverlapsAnyPad(clamped, radius + margin)) return clamped;
+
+    for (let i = 0; i < 50; i++) {
+      const candidate = 4 + Math.random() * (CONFIG.worldWidth - 8);
+      const safe = clamp(candidate, 2 + radius, CONFIG.worldWidth - 2 - radius);
+      if (!xOverlapsAnyPad(safe, radius + margin)) return safe;
     }
+    return clamped;
   }
 
-  function scoreQualifiesForLeaderboard(score) {
-    if (score <= 0) return false;
-    if (game.leaderboard.length < MAX_LEADERBOARD_ENTRIES) return true;
-    const lowest = game.leaderboard[game.leaderboard.length - 1];
-    return score > (lowest?.score || 0);
+  function dropCargoFromSupplyShip(x, y) {
+    const type = cargoTypes[Math.floor(Math.random() * cargoTypes.length)];
+    const safeX = pickDropXAvoidPads(x, type.r);
+    const hue = Math.floor(Math.random() * 360);
+    const piece = createCargoPiece(safeX, y, type, hue, Math.floor(Math.random() * cargoShapes.length));
+    piece.vx = (Math.random() - 0.5) * 0.8;
+    piece.vy = 0.2 + Math.random() * 0.9;
+    piece.angle = Math.random() * Math.PI * 2;
+    cargos.push(piece);
   }
 
-  async function submitLeaderboardScore(name, score) {
-    const player = normalizePlayerName(name);
-    if (!player || player.length > 10) return false;
-    try {
-      const resp = await fetch('leaderboard.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: player, score: Math.floor(score) }),
-      });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = await resp.json();
-      if (!data || !Array.isArray(data.entries)) throw new Error('Invalid payload');
-      game.leaderboard = data.entries.slice(0, MAX_LEADERBOARD_ENTRIES);
-      game.leaderboardError = '';
-      game.leaderboardLoaded = true;
-      return true;
-    } catch (err) {
-      game.leaderboardError = 'Unable to save score';
-      return false;
+
+  function spawnSupplyShip() {
+    const dir = Math.random() < 0.5 ? 1 : -1;
+    const tm = terrainMetrics();
+    const y = tm.minY - (4.8 + Math.random() * 4.5);
+    const startX = dir > 0 ? -10 : CONFIG.worldWidth + 10;
+    const endX = dir > 0 ? CONFIG.worldWidth + 12 : -12;
+    const speed = 6.3 + Math.random() * 2.2;
+
+    const viewW = W / CONFIG.METER_TO_PX;
+    const onScreenDrop = pickDropXAvoidPads(game.camera.x + (Math.random() - 0.5) * viewW * 0.35, 0.26);
+    const drops = [onScreenDrop];
+    while (drops.length < CONFIG.supplyDropsPerShip) {
+      const candidate = pickDropXAvoidPads(8 + Math.random() * (CONFIG.worldWidth - 16), 0.26);
+      if (drops.every((x) => Math.abs(x - candidate) > 6.5)) drops.push(candidate);
     }
+    drops.sort((a, b) => dir > 0 ? a - b : b - a);
+
+    game.supplyShips.push({ x: startX, y, dir, speed, endX, drops, dropped: 0 });
   }
 
+  function updateSupplyShips(dt) {
+    if (game.state !== 'PLAYING') return;
 
-  async function submitNameEntry() {
-    const entry = game.nameEntry;
-    if (!entry.active || entry.submitting) return;
-    const name = normalizePlayerName(entry.value);
-    if (!name) {
-      entry.message = 'Enter 1-10 characters';
-      return;
+    game.supplySpawnTimer -= dt;
+    if (game.supplySpawnTimer <= 0) {
+      spawnSupplyShip();
+      game.supplySpawnTimer += CONFIG.supplyShipIntervalSec;
     }
 
-    entry.submitting = true;
-    entry.message = 'Saving...';
-    const ok = await submitLeaderboardScore(name, entry.score);
-    entry.submitting = false;
-    entry.message = ok ? 'Saved!' : 'Save failed';
-
-    if (ok) {
-      entry.active = false;
-      entry.value = '';
-    }
-  }
-
-  function beginLeaderboardNameEntry() {
-    if (game.nameEntry.active) return;
-    if (!scoreQualifiesForLeaderboard(game.score)) return;
-    game.nameEntry.active = true;
-    game.nameEntry.value = '';
-    game.nameEntry.score = Math.floor(game.score);
-    game.nameEntry.submitting = false;
-    game.nameEntry.message = 'New high score! Enter your name';
-  }
-
-  function handleNameEntryKey(e) {
-    const entry = game.nameEntry;
-    if (!entry.active) return false;
-
-    if (e.code === 'Enter') {
-      e.preventDefault();
-      submitNameEntry();
-      return true;
-    }
-
-    if (e.code === 'Escape') {
-      e.preventDefault();
-      if (!entry.submitting) {
-        entry.active = false;
-        entry.value = '';
+    for (const craft of game.supplyShips) {
+      craft.x += craft.dir * craft.speed * dt;
+      while (craft.dropped < craft.drops.length) {
+        const targetX = craft.drops[craft.dropped];
+        const reached = craft.dir > 0 ? craft.x >= targetX : craft.x <= targetX;
+        if (!reached) break;
+        dropCargoFromSupplyShip(targetX, craft.y + 0.5);
+        craft.dropped += 1;
       }
-      return true;
     }
 
-    if (e.code === 'Backspace') {
-      e.preventDefault();
-      if (!entry.submitting) entry.value = entry.value.slice(0, -1);
-      return true;
-    }
-
-    if (!entry.submitting && e.key && e.key.length === 1) {
-      const next = normalizePlayerName(entry.value + e.key);
-      if (next.length <= 10) entry.value = next;
-      e.preventDefault();
-      return true;
-    }
-
-    return true;
+    game.supplyShips = game.supplyShips.filter((craft) => {
+      const pastEnd = craft.dir > 0 ? craft.x < craft.endX : craft.x > craft.endX;
+      return pastEnd || craft.dropped < craft.drops.length;
+    });
   }
 
+  function drawSupplyShips() {
+    for (const craft of game.supplyShips) {
+      const s = toScreen(craft.x, craft.y);
+      if (s.x < -60 || s.x > W + 60 || s.y < -40 || s.y > getGameplayHeight() + 20) continue;
+
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.scale(craft.dir, 1);
+      ctx.fillStyle = '#b8c4d7';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 24, 9, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#6f7f96';
+      ctx.fillRect(-16, -2, 20, 4);
+      ctx.fillStyle = '#9ce8ff';
+      ctx.fillRect(5, -1, 12, 2);
+      ctx.restore();
+    }
+  }
 
   function randomizeWorld() {
     terrain = generateTerrain();
     regenerateStars();
     spawnCargo();
+    game.supplyShips = [];
+    game.supplySpawnTimer = CONFIG.supplyShipIntervalSec;
   }
 
   function startMission() {
@@ -522,6 +543,11 @@
     ship.invincibleTimer = 0;
     ship.trayExtended = true;
     ship.traySlide = 1;
+    ship.tracksExtended = false;
+    ship.tracksDeploy = 0;
+    ship.gearExtended = true;
+    ship.gearDeploy = 1;
+    ship.gearSafetyTimer = 0;
     ship.angle = 0;
     ship.av = 0;
     randomizeWorld();
@@ -537,8 +563,11 @@
   }
 
   function setShipOnGround() {
-    const skidL = worldFromLocal(ship, shipShape.skidL);
-    const skidR = worldFromLocal(ship, shipShape.skidR);
+    const supportLocals = getSupportLocals();
+    const supportLLocal = supportLocals.left;
+    const supportRLocal = supportLocals.right;
+    const skidL = worldFromLocal(ship, supportLLocal);
+    const skidR = worldFromLocal(ship, supportRLocal);
     const gyL = terrainY(skidL.x);
     const gyR = terrainY(skidR.x);
     ship.y += Math.min(gyL - skidL.y, gyR - skidR.y);
@@ -549,8 +578,11 @@
   }
 
   function distanceToGroundMeters() {
-    const skidL = worldFromLocal(ship, shipShape.skidL);
-    const skidR = worldFromLocal(ship, shipShape.skidR);
+    const supportLocals = getSupportLocals();
+    const supportLLocal = supportLocals.left;
+    const supportRLocal = supportLocals.right;
+    const skidL = worldFromLocal(ship, supportLLocal);
+    const skidR = worldFromLocal(ship, supportRLocal);
     const dL = terrainY(skidL.x) - skidL.y;
     const dR = terrainY(skidR.x) - skidR.y;
     return Math.max(0, Math.min(dL, dR));
@@ -701,7 +733,6 @@
     ship.cargoMass = 0;
     // eslint-disable-next-line no-console
     console.info('Crash:', reason);
-    beginLeaderboardNameEntry();
   }
 
   function respawnShip() {
@@ -726,19 +757,37 @@
     ship.invincibleTimer = 0;
     ship.trayExtended = false;
     ship.traySlide = 0;
+    ship.tracksExtended = false;
+    ship.tracksDeploy = 0;
+    ship.gearExtended = false;
+    ship.gearDeploy = 0;
+    ship.gearSafetyTimer = 0;
     setShipOnGround();
     game.camera.x = ship.x;
     game.camera.y = ship.y - 6;
     game.state = 'READY';
-    fetchLeaderboard();
+    game.showHelp = false;
   }
 
   function updateInput(dt) {
-    if (keys.has('KeyA')) ship.av -= CONFIG.torqueAccel * dt;
-    if (keys.has('KeyD')) ship.av += CONFIG.torqueAccel * dt;
+    const tracksLock = ship.tracksExtended || ship.tracksDeploy > 0.05;
+    const tracksDriving = ship.tracksDeploy > 0.6 && ship.landed;
 
-    if (keys.has('KeyW')) ship.throttle = clamp(ship.throttle + CONFIG.throttleRampPerSec * dt, 0, 1);
-    if (keys.has('KeyS')) ship.throttle = clamp(ship.throttle - CONFIG.throttleRampPerSec * dt, 0, 1);
+    if (tracksDriving) {
+      ship.throttle = 0;
+      if (keys.has('KeyA')) ship.vx -= CONFIG.trackDriveAccel * dt;
+      if (keys.has('KeyD')) ship.vx += CONFIG.trackDriveAccel * dt;
+      ship.vx = clamp(ship.vx, -CONFIG.trackDriveMaxSpeed, CONFIG.trackDriveMaxSpeed);
+      ship.av *= 0.75;
+    } else if (!tracksLock) {
+      if (keys.has('KeyA')) ship.av -= CONFIG.torqueAccel * dt;
+      if (keys.has('KeyD')) ship.av += CONFIG.torqueAccel * dt;
+
+      if (keys.has('KeyW')) ship.throttle = clamp(ship.throttle + CONFIG.throttleRampPerSec * dt, 0, 1);
+      if (keys.has('KeyS')) ship.throttle = clamp(ship.throttle - CONFIG.throttleRampPerSec * dt, 0, 1);
+    } else {
+      ship.throttle = 0;
+    }
 
     if (keys.has('KeyK')) ship.baseAngle -= CONFIG.baseRate * dt;
     if (keys.has('KeyL')) ship.baseAngle += CONFIG.baseRate * dt;
@@ -756,6 +805,37 @@
 
   function updateShip(dt) {
     ship.invincibleTimer = Math.max(0, ship.invincibleTimer - dt);
+    ship.gearSafetyTimer = Math.max(0, ship.gearSafetyTimer - dt);
+    if (ship.tracksExtended && ship.gearExtended) ship.gearExtended = false;
+    const swapToTracks = ship.tracksExtended;
+    const modeTransitionActive = swapToTracks
+      ? (ship.gearDeploy > 0.001 || ship.tracksDeploy < 0.999)
+      : (ship.tracksDeploy > 0.001 || ship.gearDeploy < 0.999);
+
+    const swapRate = CONFIG.trackDeployRate * (modeTransitionActive ? 0.5 : 1);
+    if (swapToTracks) {
+      // Entering vehicle mode sequence: gear retracts first, then tracks extend.
+      const gearStepDone = ship.gearDeploy <= 0.02;
+      ship.gearDeploy = lerp(ship.gearDeploy, 0, clamp(swapRate * dt, 0, 1));
+      if (gearStepDone) ship.tracksDeploy = lerp(ship.tracksDeploy, 1, clamp(swapRate * dt, 0, 1));
+      else ship.tracksDeploy = lerp(ship.tracksDeploy, 0, clamp(swapRate * dt, 0, 1));
+    } else {
+      // Exiting vehicle mode sequence: tracks retract first, then gear extends.
+      const trackStepDone = ship.tracksDeploy <= 0.02;
+      ship.tracksDeploy = lerp(ship.tracksDeploy, 0, clamp(swapRate * dt, 0, 1));
+      if (trackStepDone) ship.gearDeploy = lerp(ship.gearDeploy, 1, clamp(swapRate * dt, 0, 1));
+      else ship.gearDeploy = lerp(ship.gearDeploy, 0, clamp(swapRate * dt, 0, 1));
+    }
+
+    // Manual gear toggle outside track mode.
+    if (!modeTransitionActive && !ship.tracksExtended) {
+      ship.gearDeploy = lerp(ship.gearDeploy, ship.gearExtended ? 1 : 0, clamp(CONFIG.landingGearRate * dt, 0, 1));
+    }
+
+    // Ensure transitions fully complete (avoid asymptotic lingering).
+    if (Math.abs(ship.tracksDeploy - (ship.tracksExtended ? 1 : 0)) < 0.001) ship.tracksDeploy = ship.tracksExtended ? 1 : 0;
+    if (!ship.tracksExtended && Math.abs(ship.gearDeploy - (ship.gearExtended ? 1 : 0)) < 0.001) ship.gearDeploy = ship.gearExtended ? 1 : 0;
+    if (ship.tracksExtended && Math.abs(ship.gearDeploy) < 0.001) ship.gearDeploy = 0;
 
     const recyclePadUnderShip = terrain.pads.find((p) => p.kind === 'recycle' && Math.abs(ship.x - p.x) <= p.w * 0.45);
     if (ship.landed && recyclePadUnderShip) {
@@ -774,8 +854,11 @@
       ship.fuel = clamp(ship.fuel - burn, 0, 100);
     }
 
+    const tracksLock = ship.tracksExtended || ship.tracksDeploy > 0.05;
+    const tracksDriving = ship.tracksDeploy > 0.6;
     let thrust = 0;
-    if (ship.fuel > 0) thrust = CONFIG.thrustMax * ship.throttle;
+    if (!tracksLock && ship.fuel > 0) thrust = CONFIG.thrustMax * ship.throttle;
+    if (tracksLock) ship.throttle = 0;
 
     const thrustDir = rotate({ x: 0, y: -1 }, ship.angle);
     ship.vx += (thrustDir.x * thrust / mass) * dt;
@@ -812,8 +895,11 @@
       if (ship.vy > 0) ship.vy = 0;
     }
 
-    const skidL = worldFromLocal(ship, shipShape.skidL);
-    const skidR = worldFromLocal(ship, shipShape.skidR);
+    const supportLocals = getSupportLocals();
+    const supportLLocal = supportLocals.left;
+    const supportRLocal = supportLocals.right;
+    const skidL = worldFromLocal(ship, supportLLocal);
+    const skidR = worldFromLocal(ship, supportRLocal);
     const hullCenter = { x: ship.x, y: ship.y };
 
     if (ship.invincibleTimer <= 0) {
@@ -827,8 +913,24 @@
 
     const skidLInBounds = skidL.x >= 0 && skidL.x <= CONFIG.worldWidth;
     const skidRInBounds = skidR.x >= 0 && skidR.x <= CONFIG.worldWidth;
-    const skidLContact = skidLInBounds && skidL.y >= terrainY(skidL.x);
-    const skidRContact = skidRInBounds && skidR.y >= terrainY(skidR.x);
+    const trackContactPad = tracksDriving ? 0.12 : 0;
+    const skidLContact = skidLInBounds && (skidL.y + trackContactPad) >= terrainY(skidL.x);
+    const skidRContact = skidRInBounds && (skidR.y + trackContactPad) >= terrainY(skidR.x);
+
+    if (tracksDriving) {
+      const gxL = clamp(ship.x + shipShape.skidL.x, 0, CONFIG.worldWidth);
+      const gxR = clamp(ship.x + shipShape.skidR.x, 0, CONFIG.worldWidth);
+      const gyL = terrainY(gxL);
+      const gyR = terrainY(gxR);
+      const slopeAngle = Math.atan2(gyR - gyL, Math.max(0.001, gxR - gxL));
+      ship.angle = lerp(ship.angle, slopeAngle, clamp(8 * dt, 0, 1));
+
+      const uphillSign = Math.sign(ship.vx) * Math.sign(gyR - gyL);
+      const slopeFactor = uphillSign > 0 ? 0.85 : (uphillSign < 0 ? 1.15 : 1);
+      const slopeAdjustedVx = ship.vx * slopeFactor;
+      ship.vx = lerp(ship.vx, slopeAdjustedVx, clamp(2 * dt, 0, 1));
+      ship.vx = clamp(ship.vx, -CONFIG.trackDriveMaxSpeed * 1.15, CONFIG.trackDriveMaxSpeed * 1.15);
+    }
 
     const angleOk = Math.abs(ship.angle) < CONFIG.landingMaxAngleDeg * Math.PI / 180;
     const speed = Math.hypot(ship.vx, ship.vy);
@@ -841,7 +943,13 @@
       ship.settleLock = false;
     }
 
-    if (hasSkid && !angleOk) {
+    const supportSwapActive = (ship.tracksExtended && (ship.gearDeploy > 0.02 || ship.tracksDeploy < 0.98))
+      || (!ship.tracksExtended && (ship.tracksDeploy > 0.02 || ship.gearDeploy < 0.98));
+    if (hasSkid && !tracksDriving && !supportSwapActive && ship.gearSafetyTimer <= 0 && ship.gearDeploy < 0.85) {
+      return crashShip('no-landing-gear');
+    }
+
+    if (hasSkid && !angleOk && !tracksDriving) {
       return crashShip('bad-landing');
     }
 
@@ -859,30 +967,58 @@
       }
     }
 
-    if (hasSkid && Math.abs(ship.vy) > CONFIG.landingCrashVY * CONFIG.impactRobustness) return crashShip('hard-impact');
+    if (!tracksDriving && hasSkid && Math.abs(ship.vy) > CONFIG.landingCrashVY * CONFIG.impactRobustness) return crashShip('hard-impact');
 
     let hullHitTerrain = false;
+    let hullPenetration = 0;
     for (const p of shipShape.hullPoints) {
       const w = worldFromLocal(ship, p);
       if (w.x < 0 || w.x > CONFIG.worldWidth) continue;
-      if (w.y > terrainY(w.x) - 0.02) {
+      const surfaceY = terrainY(w.x) - 0.02;
+      if (w.y > surfaceY) {
         hullHitTerrain = true;
-        break;
+        hullPenetration = Math.max(hullPenetration, w.y - surfaceY);
       }
     }
-    if (hullHitTerrain && !hasSkid && Math.abs(ship.vy) > CONFIG.landingMaxVY * CONFIG.impactRobustness) return crashShip('hull-terrain');
 
-    ship.landed = hasSkid && angleOk && speedOk && (verticalOk || ship.settleLock);
+    if (hullHitTerrain && hullPenetration > 0) {
+      // Never allow the hull to remain below terrain surface.
+      ship.y -= hullPenetration;
+    }
+
+    if (!tracksDriving && hullHitTerrain && !hasSkid) {
+      const crashV = CONFIG.landingMaxVY * CONFIG.impactRobustness;
+      const crashSpeed = CONFIG.landingMaxSpeed * CONFIG.impactRobustness;
+      if (Math.abs(ship.vy) > crashV || speed > crashSpeed) return crashShip('hull-terrain');
+
+      // Slow collision into terrain resolves as a forced settle/landing.
+      ship.vy = 0;
+      ship.vx *= 0.7;
+      ship.av *= 0.5;
+      ship.settleLock = true;
+    }
+
+    ship.landed = (tracksDriving && hasSkid) || (hasSkid && angleOk && speedOk && (verticalOk || ship.settleLock)) || (!tracksDriving && hullHitTerrain && speed < CONFIG.landingMaxSpeed * CONFIG.impactRobustness);
+    if (tracksDriving && ship.landed) {
+      ship.angle = lerp(ship.angle, 0, clamp(8 * dt, 0, 1));
+      ship.av *= 0.4;
+    }
     if (ship.landed) {
       const landingRecyclePad = terrain.pads.find((p) => p.kind === 'recycle' && Math.abs(ship.x - p.x) <= p.w * 0.45);
       if (landingRecyclePad) ship.invincibleTimer = Math.max(ship.invincibleTimer, 0.2);
       ship.vy = Math.min(ship.vy, 0);
       ship.bounceCount = 0;
       ship.settleLock = true;
-      ship.vx *= 0.93;
-      ship.av *= 0.85;
-      const ground = Math.min(terrainY(skidL.x) - shipShape.skidL.y, terrainY(skidR.x) - shipShape.skidR.y);
-      ship.y = Math.min(ship.y, ground);
+      if (tracksDriving) {
+        ship.vy = 0;
+        ship.vx *= 0.985;
+        ship.av *= 0.25;
+      } else {
+        ship.vx *= 0.93;
+        ship.av *= 0.85;
+      }
+      const ground = Math.min(terrainY(skidL.x) - supportLLocal.y, terrainY(skidR.x) - supportRLocal.y);
+      ship.y = tracksDriving ? ground : Math.min(ship.y, ground);
     }
 
     // Refuel only with safe skid landing on refuel pad.
@@ -1337,6 +1473,26 @@
     const m = CONFIG.METER_TO_PX;
 
     const flame = ship.fuel > 0 ? ship.throttle : 0;
+
+    const rotateLeftFx = game.state === 'PLAYING' && keys.has('KeyA');
+    const rotateRightFx = game.state === 'PLAYING' && keys.has('KeyD');
+    if (rotateLeftFx || rotateRightFx) {
+      ctx.strokeStyle = '#ff9f6a';
+      ctx.lineWidth = 2.4;
+      if (rotateLeftFx) {
+        ctx.beginPath();
+        ctx.moveTo(0.9 * m, -0.12 * m);
+        ctx.lineTo(1.18 * m + Math.random() * 6, (-0.12 + (Math.random() - 0.5) * 0.06) * m);
+        ctx.stroke();
+      }
+      if (rotateRightFx) {
+        ctx.beginPath();
+        ctx.moveTo(-0.9 * m, -0.12 * m);
+        ctx.lineTo(-1.18 * m - Math.random() * 6, (-0.12 + (Math.random() - 0.5) * 0.06) * m);
+        ctx.stroke();
+      }
+    }
+
     if (flame > 0.02) {
       ctx.strokeStyle = '#ffbf66';
       ctx.lineWidth = 3;
@@ -1355,6 +1511,63 @@
     ctx.fillStyle = '#d5dbe6';
     ctx.fillRect(tr.x * m, tr.y * m, 5, tr.h * m);
     ctx.fillRect((tr.x + tr.w) * m - 5, tr.y * m, 5, tr.h * m);
+
+    // Landing gear feet + support arms
+    const supportLocals = getSupportLocals();
+    const footL = supportLocals.left;
+    const footR = supportLocals.right;
+
+    const footW = 0.434 * m;
+    const footH = 0.07 * m;
+    const armTopY = (shipShape.skidL.y - 0.28) * m;
+
+    const leftFootCenterX = shipShape.skidL.x * m * 1.5;
+    const rightFootCenterX = shipShape.skidR.x * m * 1.5;
+    const leftFootCenterY = footL.y * m;
+    const rightFootCenterY = footR.y * m;
+
+    // 45-degree support arms (one per side), rendered behind the hull.
+    if (ship.gearDeploy > 0.001) {
+      const legDropL = Math.max(0, leftFootCenterY - armTopY);
+      const legDropR = Math.max(0, rightFootCenterY - armTopY);
+      const leftTopX = leftFootCenterX + legDropL;
+      const rightTopX = rightFootCenterX - legDropR;
+
+      ctx.strokeStyle = '#8a96a4';
+      ctx.lineWidth = 9;
+      ctx.beginPath();
+      ctx.moveTo(leftTopX, armTopY);
+      ctx.lineTo(leftFootCenterX, leftFootCenterY);
+      ctx.moveTo(rightTopX, armTopY);
+      ctx.lineTo(rightFootCenterX, rightFootCenterY);
+      ctx.stroke();
+    }
+
+    const trackY = (shipShape.skidL.y + 0.02) * m;
+    const trackH = (0.33 * ship.tracksDeploy) * m;
+    const trackW = 0.6 * m;
+    const centerGap = 0.34 * m;
+    const leftTrackX = -centerGap - trackW;
+    const rightTrackX = centerGap;
+    const joinX = leftTrackX + trackW;
+    const joinW = rightTrackX - joinX;
+
+    // Track support legs, rendered behind the hull so they look under-mounted.
+    if (ship.tracksDeploy > 0.001) {
+      const trackTopY = trackY;
+      const leftTrackCenterX = leftTrackX + trackW * 0.5;
+      const rightTrackCenterX = rightTrackX + trackW * 0.5;
+      const trackLegTopY = (shipShape.skidL.y - 0.25) * m;
+
+      ctx.strokeStyle = '#8a96a4';
+      ctx.lineWidth = 9;
+      ctx.beginPath();
+      ctx.moveTo(leftTrackCenterX, trackLegTopY);
+      ctx.lineTo(leftTrackCenterX, trackTopY);
+      ctx.moveTo(rightTrackCenterX, trackLegTopY);
+      ctx.lineTo(rightTrackCenterX, trackTopY);
+      ctx.stroke();
+    }
 
     // Hull
     ctx.fillStyle = '#d5dbe6';
@@ -1377,15 +1590,39 @@
     ctx.fillText('Recycle', 0, -0.16 * m);
     ctx.fillText('Hero', 0, 0.02 * m);
 
-    // Skids (safe landing colliders)
-    ctx.strokeStyle = '#73ffcf';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo((shipShape.skidL.x - 0.22) * m, shipShape.skidL.y * m);
-    ctx.lineTo((shipShape.skidL.x + 0.22) * m, shipShape.skidL.y * m);
-    ctx.moveTo((shipShape.skidR.x - 0.22) * m, shipShape.skidR.y * m);
-    ctx.lineTo((shipShape.skidR.x + 0.22) * m, shipShape.skidR.y * m);
-    ctx.stroke();
+    if (ship.gearDeploy > 0.001) {
+      // Feet (bright red), centered at each leg endpoint.
+      ctx.fillStyle = '#ff2a2a';
+      ctx.fillRect(leftFootCenterX - footW * 0.5, leftFootCenterY - footH * 0.5, footW, footH);
+      ctx.fillRect(rightFootCenterX - footW * 0.5, rightFootCenterY - footH * 0.5, footW, footH);
+    }
+
+    if (ship.tracksDeploy > 0.001) {
+      ctx.fillStyle = '#191c22';
+      ctx.fillRect(leftTrackX, trackY, trackW, trackH);
+      ctx.fillRect(rightTrackX, trackY, trackW, trackH);
+      ctx.fillRect(joinX, trackY, joinW, trackH);
+
+      ctx.fillStyle = '#646f7b';
+      const treadInset = 0.06 * m;
+      ctx.fillRect(leftTrackX + treadInset, trackY + trackH * 0.22, trackW - treadInset * 2, trackH * 0.56);
+      ctx.fillRect(rightTrackX + treadInset, trackY + trackH * 0.22, trackW - treadInset * 2, trackH * 0.56);
+      ctx.fillRect(joinX + treadInset * 0.5, trackY + trackH * 0.22, Math.max(0, joinW - treadInset), trackH * 0.56);
+
+      const wheelR = Math.max(1.2, trackH * 0.25);
+      ctx.fillStyle = '#ffffff';
+      const leftCenterX = leftTrackX + trackW * 0.5;
+      const rightCenterX = rightTrackX + trackW * 0.5;
+      const topY = trackY + wheelR + 2;
+      const bottomY = trackY + trackH - wheelR - 2;
+      for (const cx of [leftCenterX, rightCenterX]) {
+        for (const cy of [topY, bottomY]) {
+          ctx.beginPath();
+          ctx.arc(cx, cy, wheelR, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
 
     // Crane segments
     const base = shipShape.craneBase;
@@ -1582,15 +1819,22 @@
 
 
   function drawLeftInfoPanel(title, lines) {
-    const panelW = Math.max(360, Math.floor(W * 0.34));
-    ctx.fillStyle = 'rgba(0,0,0,0.86)';
-    ctx.fillRect(0, 0, panelW, H);
-    ctx.strokeStyle = '#2b2b2b';
-    ctx.strokeRect(0, 0, panelW, H);
+    const panelW = Math.min(760, Math.max(360, Math.floor(W * 0.7)));
+    const panelH = Math.min(H - 40, Math.max(280, Math.floor(H * 0.74)));
+    const panelX = Math.floor((W - panelW) * 0.5);
+    const panelY = Math.floor((H - panelH) * 0.5);
 
-    const padX = 22;
-    const padY = 20;
-    const maxW = panelW - padX * 2;
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = 'rgba(8,12,20,0.92)';
+    ctx.fillRect(panelX, panelY, panelW, panelH);
+    ctx.strokeStyle = '#2b2b2b';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(panelX, panelY, panelW, panelH);
+
+    const padX = panelX + 22;
+    const padY = panelY + 20;
+    const maxW = panelW - 44;
     const nonEmpty = lines.filter(Boolean);
 
     let bodySize = 28;
@@ -1606,7 +1850,7 @@
       }, 0);
       ctx.font = `bold ${titleSize}px Segoe UI`;
       const titleW = ctx.measureText(title).width;
-      if (totalRowsH <= H - padY * 2 && Math.max(maxLine, titleW) <= maxW) break;
+      if (totalRowsH <= panelH - 24 && Math.max(maxLine, titleW) <= maxW) break;
     }
 
     const titleSize = Math.round(bodySize * 1.45);
@@ -1626,6 +1870,7 @@
       ctx.fillText(line, padX, y);
     }
   }
+
 
   function drawHUD() {
     if (game.paused) {
@@ -1650,28 +1895,7 @@
     if (game.state === 'READY') {
       ctx.fillStyle = 'rgba(0,0,0,0.42)';
       ctx.fillRect(0, 0, W, H);
-      const panelW = Math.max(360, Math.floor(W * 0.34));
-      drawLeftInfoPanel('CONTROLS', [
-        'A  - ROTATE LEFT',
-        'D  - ROTATE RIGHT',
-        'W  - THROTTLE UP',
-        'S  - THROTTLE DOWN',
-        'SPACE - START / TOGGLE TRAY',
-        'O  - ARM SEG1 UP',
-        'I  - ARM SEG1 DOWN',
-        'M  - ARM SEG2 UP',
-        'N  - ARM SEG2 DOWN',
-        'K  - BASE CCW',
-        'L  - BASE CW',
-        ',  - CLAW CLOSE',
-        '.  - CLAW OPEN',
-        'H  - HELP / PAUSE',
-        'ESC - PAUSE',
-      ]);
 
-      // Responsive right-side READY heading/subheading that always fits window size.
-      const rightX = panelW + 26;
-      const rightW = Math.max(180, W - rightX - 24);
       const gameplayH = getGameplayHeight();
       const titleY = gameplayH * 0.42;
       const subY = gameplayH * 0.52;
@@ -1679,50 +1903,33 @@
       let titleSize = Math.min(56, Math.max(22, Math.round(gameplayH * 0.09)));
       for (; titleSize >= 18; titleSize -= 1) {
         ctx.font = `bold ${titleSize}px Segoe UI`;
-        if (ctx.measureText('SPACE RECYCLE HERO').width <= rightW) break;
+        if (ctx.measureText('SPACE RECYCLE HERO').width <= W - 48) break;
       }
       let subSize = Math.min(30, Math.max(14, Math.round(gameplayH * 0.05)));
       for (; subSize >= 12; subSize -= 1) {
         ctx.font = `bold ${subSize}px Segoe UI`;
-        if (ctx.measureText('PRESS SPACE TO START').width <= rightW) break;
+        if (ctx.measureText('PRESS SPACE TO START').width <= W - 48) break;
       }
 
+      ctx.textAlign = 'center';
       ctx.fillStyle = '#ffffff';
       ctx.font = `bold ${titleSize}px Segoe UI`;
-      ctx.fillText('SPACE RECYCLE HERO', rightX, titleY);
+      ctx.fillText('SPACE RECYCLE HERO', W / 2, titleY);
       ctx.font = `bold ${subSize}px Segoe UI`;
       ctx.fillStyle = '#9ce8ff';
-      ctx.fillText('PRESS SPACE TO START', rightX, subY);
+      ctx.fillText('PRESS SPACE TO START', W / 2, subY);
 
-      const boardY = subY + Math.max(34, gameplayH * 0.08);
-      const boardLineH = Math.max(16, Math.round(gameplayH * 0.035));
-      ctx.fillStyle = '#ffe48a';
-      ctx.font = `bold ${Math.max(14, Math.round(boardLineH * 0.95))}px Segoe UI`;
-      ctx.fillText('TOP 10 LEADERBOARD', rightX, boardY);
-
-      const rows = game.leaderboard.slice(0, MAX_LEADERBOARD_ENTRIES);
-      ctx.font = `${Math.max(12, Math.round(boardLineH * 0.82))}px Consolas, monospace`;
-      ctx.fillStyle = '#e5f6ff';
-      for (let i = 0; i < MAX_LEADERBOARD_ENTRIES; i++) {
-        const entry = rows[i];
-        const y = boardY + (i + 1) * boardLineH;
-        const rank = `${i + 1}.`.padEnd(4, ' ');
-        const nm = (entry?.name || '---').padEnd(10, ' ').slice(0, 10);
-        const sc = String(entry?.score || 0).padStart(5, ' ');
-        ctx.fillText(`${rank}${nm} ${sc}`, rightX, y);
-      }
-
-      if (game.leaderboardError) {
-        ctx.fillStyle = '#ff9a9a';
-        ctx.font = `${Math.max(11, Math.round(boardLineH * 0.72))}px Segoe UI`;
-        ctx.fillText(game.leaderboardError, rightX, boardY + (MAX_LEADERBOARD_ENTRIES + 1.5) * boardLineH);
-      }
+      ctx.fillStyle = '#ff4f4f';
+      ctx.font = `bold ${Math.max(14, Math.round(subSize * 0.78))}px Segoe UI`;
+      ctx.fillText('PRESS H FOR CONTROLS', W / 2, subY + Math.max(30, subSize * 1.6));
+      ctx.textAlign = 'left';
     }
+
 
     drawBottomConsole();
 
 
-    if (game.showHelp && game.state !== 'READY') {
+    if (game.showHelp) {
       drawLeftInfoPanel('HELP', [
         'A / D  - ROTATE SHIP',
         'W / S  - THROTTLE UP / DOWN',
@@ -1731,6 +1938,8 @@
         'M / N  - ARM SEGMENT 2 UP / DOWN',
         'K / L  - ARM BASE CCW / CW',
         ', / .  - CLAW CLOSE / OPEN',
+        'Q      - TRACK MODE (LANDED)',
+        'E      - TOGGLE LANDING GEAR',
         'SAFE LANDING: SKIDS ONLY, LOW SPEED',
         'LAND ON REFUEL PAD TO REFILL FUEL',
         'LAND ON RECYCLE PAD TO DELIVER CARGO',
@@ -1738,48 +1947,6 @@
       ]);
     }
 
-    if (game.nameEntry.active) {
-      const boxW = Math.min(560, Math.floor(W * 0.75));
-      const boxH = 190;
-      const x = Math.floor((W - boxW) * 0.5);
-      const y = Math.floor((getGameplayHeight() - boxH) * 0.45);
-
-      ctx.fillStyle = 'rgba(0,0,0,0.72)';
-      ctx.fillRect(0, 0, W, getGameplayHeight());
-      ctx.fillStyle = '#151a29';
-      ctx.fillRect(x, y, boxW, boxH);
-      ctx.strokeStyle = '#9ce8ff';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(x, y, boxW, boxH);
-
-      const entry = game.nameEntry;
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 26px Segoe UI';
-      ctx.fillText('NEW HIGH SCORE!', x + 20, y + 38);
-      ctx.font = '16px Segoe UI';
-      ctx.fillStyle = '#dbe9ff';
-      ctx.fillText(`Score: ${entry.score}`, x + 20, y + 62);
-      ctx.fillText('Enter name (max 10):', x + 20, y + 88);
-
-      const fieldW = boxW - 40;
-      const fieldY = y + 100;
-      ctx.fillStyle = '#0e1422';
-      ctx.fillRect(x + 20, fieldY, fieldW, 38);
-      ctx.strokeStyle = '#6ccfff';
-      ctx.strokeRect(x + 20, fieldY, fieldW, 38);
-
-      const displayName = (entry.value || '').slice(0, 10);
-      const cursor = Math.floor(performance.now() / 500) % 2 === 0 ? '|' : ' ';
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 22px Consolas, monospace';
-      ctx.fillText(displayName + (entry.submitting ? '' : cursor), x + 28, fieldY + 26);
-
-      ctx.font = '14px Segoe UI';
-      ctx.fillStyle = entry.message.includes('failed') ? '#ff9a9a' : '#9ce8ff';
-      ctx.fillText(entry.message || 'Press Enter to submit', x + 20, y + 158);
-      ctx.fillStyle = '#9fb5cf';
-      ctx.fillText('Enter = Submit, Backspace = Delete, Esc = Cancel', x + 20, y + 176);
-    }
   }
 
   let last = performance.now();
@@ -1796,6 +1963,9 @@
       } else if (game.state === 'PLAYING') {
         updateShip(dt);
         updateCargo(dt);
+        updateSupplyShips(dt);
+        updateCamera(dt);
+      } else if (game.state === 'READY') {
         updateCamera(dt);
       }
       updateExplosions(dt);
@@ -1803,6 +1973,7 @@
     }
 
     drawBackground();
+    drawSupplyShips();
     drawTerrainAndPads();
     for (const c of cargos) {
       if (c.scored) continue;
@@ -1816,6 +1987,5 @@
     requestAnimationFrame(loop);
   }
 
-  fetchLeaderboard();
   requestAnimationFrame(loop);
 })();
