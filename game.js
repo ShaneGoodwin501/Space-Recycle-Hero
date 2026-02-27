@@ -540,8 +540,8 @@
     ship.traySlide = 1;
     ship.tracksExtended = false;
     ship.tracksDeploy = 0;
-    ship.gearExtended = false;
-    ship.gearDeploy = 0;
+    ship.gearExtended = true;
+    ship.gearDeploy = 1;
     ship.angle = 0;
     ship.av = 0;
     randomizeWorld();
