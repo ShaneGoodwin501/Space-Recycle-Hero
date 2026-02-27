@@ -1489,7 +1489,7 @@
       const rightTopX = rightFootCenterX - legDropR;
 
       ctx.strokeStyle = '#8a96a4';
-      ctx.lineWidth = 18;
+      ctx.lineWidth = 9;
       ctx.beginPath();
       ctx.moveTo(leftTopX, armTopY);
       ctx.lineTo(leftFootCenterX, leftFootCenterY);
