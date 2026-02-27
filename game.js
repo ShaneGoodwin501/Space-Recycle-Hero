@@ -46,6 +46,7 @@
     trackDeployRate: 5.5,
     trackDriveAccel: 4.8,
     trackDriveMaxSpeed: 2.7,
+    landingGearRate: 5.2,
   };
 
   const canvas = document.getElementById('gameCanvas');
@@ -82,7 +83,7 @@
   resize();
 
   const keys = new Set();
-  const blocked = new Set(['KeyW','KeyA','KeyS','KeyD','KeyI','KeyO','KeyK','KeyL','KeyN','KeyM','Comma','Period','Space','Escape','KeyH','KeyQ']);
+  const blocked = new Set(['KeyW','KeyA','KeyS','KeyD','KeyI','KeyO','KeyK','KeyL','KeyN','KeyM','Comma','Period','Space','Escape','KeyH','KeyQ','KeyE']);
   function unlockAudioFromUserGesture() {
     initAudio();
     if (game.audio?.ctx && game.audio.ctx.state !== 'running') game.audio.ctx.resume();
@@ -106,14 +107,22 @@
         game.showHelp = !game.showHelp;
       }
     }
+    if (e.code === 'KeyE' && game.state === 'PLAYING') {
+      const tracksMode = ship.tracksExtended || ship.tracksDeploy > 0.05;
+      if (!tracksMode) {
+        if (!(ship.landed && ship.gearExtended)) ship.gearExtended = !ship.gearExtended;
+      }
+    }
     if (e.code === 'KeyQ' && game.state === 'PLAYING') {
       const canToggleOn = !ship.tracksExtended && ship.landed && ship.throttle < 0.02 && Math.hypot(ship.vx, ship.vy) < 0.45;
       const canToggleOff = ship.tracksExtended && ship.landed && Math.hypot(ship.vx, ship.vy) < 0.9;
       if (canToggleOn) {
         ship.tracksExtended = true;
         ship.throttle = 0;
+        if (ship.gearExtended) ship.gearExtended = false;
       } else if (canToggleOff) {
         ship.tracksExtended = false;
+        ship.gearExtended = true;
       }
     }
     if (e.code === 'Escape' && game.state !== 'CRASHED' && game.state !== 'READY') {
@@ -279,12 +288,22 @@
     traySlide: 0,
     tracksExtended: false,
     tracksDeploy: 0,
+    gearExtended: false,
+    gearDeploy: 0,
   };
 
   function shipMass() {
     return ship.massBase + ship.cargoMass;
   }
 
+  function getSupportLocals() {
+    const gearExtra = shipShape.skidL.y * 0.6 * ship.gearDeploy;
+    const trackExtra = 0.16 * ship.tracksDeploy;
+    return {
+      left: { x: shipShape.skidL.x, y: shipShape.skidL.y + gearExtra + trackExtra },
+      right: { x: shipShape.skidR.x, y: shipShape.skidR.y + gearExtra + trackExtra },
+    };
+  }
 
   function getTrayRect() {
     const slideOffset = (1 - ship.traySlide) * 1.15;
@@ -522,6 +541,8 @@
     ship.traySlide = 1;
     ship.tracksExtended = false;
     ship.tracksDeploy = 0;
+    ship.gearExtended = false;
+    ship.gearDeploy = 0;
     ship.angle = 0;
     ship.av = 0;
     randomizeWorld();
@@ -537,8 +558,9 @@
   }
 
   function setShipOnGround() {
-    const supportLLocal = { x: shipShape.skidL.x, y: shipShape.skidL.y + 0.16 * ship.tracksDeploy };
-    const supportRLocal = { x: shipShape.skidR.x, y: shipShape.skidR.y + 0.16 * ship.tracksDeploy };
+    const supportLocals = getSupportLocals();
+    const supportLLocal = supportLocals.left;
+    const supportRLocal = supportLocals.right;
     const skidL = worldFromLocal(ship, supportLLocal);
     const skidR = worldFromLocal(ship, supportRLocal);
     const gyL = terrainY(skidL.x);
@@ -551,8 +573,9 @@
   }
 
   function distanceToGroundMeters() {
-    const supportLLocal = { x: shipShape.skidL.x, y: shipShape.skidL.y + 0.16 * ship.tracksDeploy };
-    const supportRLocal = { x: shipShape.skidR.x, y: shipShape.skidR.y + 0.16 * ship.tracksDeploy };
+    const supportLocals = getSupportLocals();
+    const supportLLocal = supportLocals.left;
+    const supportRLocal = supportLocals.right;
     const skidL = worldFromLocal(ship, supportLLocal);
     const skidR = worldFromLocal(ship, supportRLocal);
     const dL = terrainY(skidL.x) - skidL.y;
@@ -731,6 +754,8 @@
     ship.traySlide = 0;
     ship.tracksExtended = false;
     ship.tracksDeploy = 0;
+    ship.gearExtended = false;
+    ship.gearDeploy = 0;
     setShipOnGround();
     game.camera.x = ship.x;
     game.camera.y = ship.y - 6;
@@ -774,7 +799,10 @@
 
   function updateShip(dt) {
     ship.invincibleTimer = Math.max(0, ship.invincibleTimer - dt);
+    if (ship.tracksExtended && ship.gearExtended) ship.gearExtended = false;
     ship.tracksDeploy = lerp(ship.tracksDeploy, ship.tracksExtended ? 1 : 0, clamp(CONFIG.trackDeployRate * dt, 0, 1));
+    const gearTarget = ship.gearExtended && ship.tracksDeploy < 0.05 ? 1 : 0;
+    ship.gearDeploy = lerp(ship.gearDeploy, gearTarget, clamp(CONFIG.landingGearRate * dt, 0, 1));
 
     const recyclePadUnderShip = terrain.pads.find((p) => p.kind === 'recycle' && Math.abs(ship.x - p.x) <= p.w * 0.45);
     if (ship.landed && recyclePadUnderShip) {
@@ -834,8 +862,9 @@
       if (ship.vy > 0) ship.vy = 0;
     }
 
-    const supportLLocal = { x: shipShape.skidL.x, y: shipShape.skidL.y + 0.16 * ship.tracksDeploy };
-    const supportRLocal = { x: shipShape.skidR.x, y: shipShape.skidR.y + 0.16 * ship.tracksDeploy };
+    const supportLocals = getSupportLocals();
+    const supportLLocal = supportLocals.left;
+    const supportRLocal = supportLocals.right;
     const skidL = worldFromLocal(ship, supportLLocal);
     const skidR = worldFromLocal(ship, supportRLocal);
     const hullCenter = { x: ship.x, y: ship.y };
@@ -851,8 +880,24 @@
 
     const skidLInBounds = skidL.x >= 0 && skidL.x <= CONFIG.worldWidth;
     const skidRInBounds = skidR.x >= 0 && skidR.x <= CONFIG.worldWidth;
-    const skidLContact = skidLInBounds && skidL.y >= terrainY(skidL.x);
-    const skidRContact = skidRInBounds && skidR.y >= terrainY(skidR.x);
+    const trackContactPad = tracksDriving ? 0.12 : 0;
+    const skidLContact = skidLInBounds && (skidL.y + trackContactPad) >= terrainY(skidL.x);
+    const skidRContact = skidRInBounds && (skidR.y + trackContactPad) >= terrainY(skidR.x);
+
+    if (tracksDriving) {
+      const gxL = clamp(ship.x + shipShape.skidL.x, 0, CONFIG.worldWidth);
+      const gxR = clamp(ship.x + shipShape.skidR.x, 0, CONFIG.worldWidth);
+      const gyL = terrainY(gxL);
+      const gyR = terrainY(gxR);
+      const slopeAngle = Math.atan2(gyR - gyL, Math.max(0.001, gxR - gxL));
+      ship.angle = lerp(ship.angle, slopeAngle, clamp(8 * dt, 0, 1));
+
+      const uphillSign = Math.sign(ship.vx) * Math.sign(gyR - gyL);
+      const slopeFactor = uphillSign > 0 ? 0.85 : (uphillSign < 0 ? 1.15 : 1);
+      const slopeAdjustedVx = ship.vx * slopeFactor;
+      ship.vx = lerp(ship.vx, slopeAdjustedVx, clamp(2 * dt, 0, 1));
+      ship.vx = clamp(ship.vx, -CONFIG.trackDriveMaxSpeed * 1.15, CONFIG.trackDriveMaxSpeed * 1.15);
+    }
 
     const angleOk = Math.abs(ship.angle) < CONFIG.landingMaxAngleDeg * Math.PI / 180;
     const speed = Math.hypot(ship.vx, ship.vy);
@@ -1411,15 +1456,34 @@
     ctx.fillText('Recycle', 0, -0.16 * m);
     ctx.fillText('Hero', 0, 0.02 * m);
 
-    // Skids (safe landing colliders)
+    // Landing gear feet + support arms
+    const supportLocals = getSupportLocals();
+    const footL = supportLocals.left;
+    const footR = supportLocals.right;
     ctx.strokeStyle = '#73ffcf';
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.moveTo((shipShape.skidL.x - 0.22) * m, shipShape.skidL.y * m);
-    ctx.lineTo((shipShape.skidL.x + 0.22) * m, shipShape.skidL.y * m);
-    ctx.moveTo((shipShape.skidR.x - 0.22) * m, shipShape.skidR.y * m);
-    ctx.lineTo((shipShape.skidR.x + 0.22) * m, shipShape.skidR.y * m);
+    ctx.moveTo((shipShape.skidL.x - 0.22) * m, footL.y * m);
+    ctx.lineTo((shipShape.skidL.x + 0.22) * m, footL.y * m);
+    ctx.moveTo((shipShape.skidR.x - 0.22) * m, footR.y * m);
+    ctx.lineTo((shipShape.skidR.x + 0.22) * m, footR.y * m);
     ctx.stroke();
+
+    if (ship.gearDeploy > 0.02) {
+      const armTopY = (shipShape.skidL.y - 0.2) * m;
+      ctx.strokeStyle = '#9fb7cf';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo((shipShape.skidL.x - 0.08) * m, armTopY);
+      ctx.lineTo((shipShape.skidL.x - 0.08) * m, footL.y * m);
+      ctx.moveTo((shipShape.skidL.x + 0.08) * m, armTopY);
+      ctx.lineTo((shipShape.skidL.x + 0.08) * m, footL.y * m);
+      ctx.moveTo((shipShape.skidR.x - 0.08) * m, armTopY);
+      ctx.lineTo((shipShape.skidR.x - 0.08) * m, footR.y * m);
+      ctx.moveTo((shipShape.skidR.x + 0.08) * m, armTopY);
+      ctx.lineTo((shipShape.skidR.x + 0.08) * m, footR.y * m);
+      ctx.stroke();
+    }
 
     if (ship.tracksDeploy > 0.02) {
       const trackY = (shipShape.skidL.y + 0.02) * m;
@@ -1772,6 +1836,7 @@
         'K / L  - ARM BASE CCW / CW',
         ', / .  - CLAW CLOSE / OPEN',
         'Q      - TOGGLE TRACK MODE (LANDED)',
+        'E      - TOGGLE LANDING GEAR',
         'SAFE LANDING: SKIDS ONLY, LOW SPEED',
         'LAND ON REFUEL PAD TO REFILL FUEL',
         'LAND ON RECYCLE PAD TO DELIVER CARGO',
