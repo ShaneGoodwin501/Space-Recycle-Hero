@@ -123,6 +123,7 @@
       } else if (canToggleOff) {
         ship.tracksExtended = false;
         ship.gearExtended = true;
+        ship.gearSafetyTimer = 1.2;
       }
     }
     if (e.code === 'Escape' && game.state !== 'CRASHED' && game.state !== 'READY') {
@@ -290,6 +291,7 @@
     tracksDeploy: 0,
     gearExtended: false,
     gearDeploy: 0,
+    gearSafetyTimer: 0,
   };
 
   function shipMass() {
@@ -543,6 +545,7 @@
     ship.tracksDeploy = 0;
     ship.gearExtended = true;
     ship.gearDeploy = 1;
+    ship.gearSafetyTimer = 0;
     ship.angle = 0;
     ship.av = 0;
     randomizeWorld();
@@ -756,6 +759,7 @@
     ship.tracksDeploy = 0;
     ship.gearExtended = false;
     ship.gearDeploy = 0;
+    ship.gearSafetyTimer = 0;
     setShipOnGround();
     game.camera.x = ship.x;
     game.camera.y = ship.y - 6;
@@ -799,6 +803,7 @@
 
   function updateShip(dt) {
     ship.invincibleTimer = Math.max(0, ship.invincibleTimer - dt);
+    ship.gearSafetyTimer = Math.max(0, ship.gearSafetyTimer - dt);
     if (ship.tracksExtended && ship.gearExtended) ship.gearExtended = false;
     ship.tracksDeploy = lerp(ship.tracksDeploy, ship.tracksExtended ? 1 : 0, clamp(CONFIG.trackDeployRate * dt, 0, 1));
     const gearTarget = ship.gearExtended && ship.tracksDeploy < 0.05 ? 1 : 0;
@@ -911,7 +916,7 @@
     }
 
     const transitioningToTracks = ship.tracksExtended || ship.tracksDeploy > 0.05;
-    if (hasSkid && !tracksDriving && !transitioningToTracks && ship.gearDeploy < 0.85) {
+    if (hasSkid && !tracksDriving && !transitioningToTracks && ship.gearSafetyTimer <= 0 && ship.gearDeploy < 0.85) {
       return crashShip('no-landing-gear');
     }
 
@@ -1467,33 +1472,34 @@
     const footR = supportLocals.right;
 
     if (ship.gearDeploy > 0.02) {
-      const footW = 0.44 * m;
-      const footH = 0.065 * m;
-      const leftFootX = shipShape.skidL.x * m - footW * 0.5;
-      const rightFootX = shipShape.skidR.x * m - footW * 0.5;
-      const leftFootY = footL.y * m - footH * 0.5;
-      const rightFootY = footR.y * m - footH * 0.5;
-
-      // Feet (bright red)
-      ctx.fillStyle = '#ff2a2a';
-      ctx.fillRect(leftFootX, leftFootY, footW, footH);
-      ctx.fillRect(rightFootX, rightFootY, footW, footH);
-
-      // One solid grey leg per side, each connected only to its own foot.
+      const footW = 0.62 * m;
+      const footH = 0.07 * m;
       const armTopY = (shipShape.skidL.y - 0.28) * m;
-      const leftTopX = (shipShape.skidL.x - 0.02) * m;
-      const rightTopX = (shipShape.skidR.x + 0.02) * m;
+
       const leftFootCenterX = shipShape.skidL.x * m;
       const rightFootCenterX = shipShape.skidR.x * m;
+      const leftFootCenterY = footL.y * m;
+      const rightFootCenterY = footR.y * m;
+
+      // 45-degree support arms (one per side).
+      const legDropL = Math.max(0, leftFootCenterY - armTopY);
+      const legDropR = Math.max(0, rightFootCenterY - armTopY);
+      const leftTopX = leftFootCenterX + legDropL;
+      const rightTopX = rightFootCenterX - legDropR;
 
       ctx.strokeStyle = '#8a96a4';
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.moveTo(leftTopX, armTopY);
-      ctx.lineTo(leftFootCenterX, footL.y * m);
+      ctx.lineTo(leftFootCenterX, leftFootCenterY);
       ctx.moveTo(rightTopX, armTopY);
-      ctx.lineTo(rightFootCenterX, footR.y * m);
+      ctx.lineTo(rightFootCenterX, rightFootCenterY);
       ctx.stroke();
+
+      // Feet (bright red), centered at the leg endpoints.
+      ctx.fillStyle = '#ff2a2a';
+      ctx.fillRect(leftFootCenterX - footW * 0.5, leftFootCenterY - footH * 0.5, footW, footH);
+      ctx.fillRect(rightFootCenterX - footW * 0.5, rightFootCenterY - footH * 0.5, footW, footH);
     }
 
 
