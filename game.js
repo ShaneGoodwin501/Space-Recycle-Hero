@@ -40,6 +40,12 @@
 
     cargoCount: 51,
     consoleHeightPx: 150,
+
+    supplyShipIntervalSec: 36,
+    supplyDropsPerShip: 4,
+    trackDeployRate: 5.5,
+    trackDriveAccel: 4.8,
+    trackDriveMaxSpeed: 2.7,
   };
 
   const canvas = document.getElementById('gameCanvas');
@@ -76,7 +82,7 @@
   resize();
 
   const keys = new Set();
-  const blocked = new Set(['KeyW','KeyA','KeyS','KeyD','KeyI','KeyO','KeyK','KeyL','KeyN','KeyM','Comma','Period','Space','Escape','KeyH']);
+  const blocked = new Set(['KeyW','KeyA','KeyS','KeyD','KeyI','KeyO','KeyK','KeyL','KeyN','KeyM','Comma','Period','Space','Escape','KeyH','KeyQ']);
   function unlockAudioFromUserGesture() {
     initAudio();
     if (game.audio?.ctx && game.audio.ctx.state !== 'running') game.audio.ctx.resume();
@@ -98,6 +104,16 @@
         game.paused = game.showHelp;
       } else if (game.state === 'READY') {
         game.showHelp = !game.showHelp;
+      }
+    }
+    if (e.code === 'KeyQ' && game.state === 'PLAYING') {
+      const canToggleOn = !ship.tracksExtended && ship.landed && ship.throttle < 0.02 && Math.hypot(ship.vx, ship.vy) < 0.45;
+      const canToggleOff = ship.tracksExtended && ship.landed && Math.hypot(ship.vx, ship.vy) < 0.9;
+      if (canToggleOn) {
+        ship.tracksExtended = true;
+        ship.throttle = 0;
+      } else if (canToggleOff) {
+        ship.tracksExtended = false;
       }
     }
     if (e.code === 'Escape' && game.state !== 'CRASHED' && game.state !== 'READY') {
@@ -261,6 +277,8 @@
     invincibleTimer: 0,
     trayExtended: false,
     traySlide: 0,
+    tracksExtended: false,
+    tracksDeploy: 0,
   };
 
   function shipMass() {
@@ -301,6 +319,40 @@
   const cargoShapes = ['rectangle', 'triangle', 'circle', 'trapezoid', 'diamond', 'hex'];
 
   let cargos = [];
+  let nextCargoId = 0;
+
+  function createCargoPiece(x, y, type, hue, shapeIndex = 0) {
+    return {
+      id: `c${nextCargoId++}`,
+      x, y,
+      vx: 0,
+      vy: 0,
+      angle: Math.random() * Math.PI,
+      av: 0,
+      r: type.r,
+      mass: type.mass,
+      points: type.points,
+      color: `hsl(${hue} 68% 68%)`,
+      accent: `hsl(${(hue + 180) % 360} 78% 36%)`,
+      type: type.name,
+      shape: cargoShapes[shapeIndex % cargoShapes.length],
+      grabbed: false,
+      stored: false,
+      scored: false,
+      accepting: false,
+      acceptedTimer: 0,
+      targetX: 0,
+      targetY: 0,
+      restTimer: 0,
+      localPos: { x: 0, y: 0 },
+      popDelay: 0,
+      popping: false,
+      ignoreTrayTimer: 0,
+      recyclePadX: 0,
+      recyclePadW: 0,
+      recycleLockTimer: 0,
+    };
+  }
   function xOverlapsAnyPad(x, radius = 0) {
     return terrain.pads.some((pad) => {
       const half = pad.w * 0.5;
@@ -310,6 +362,7 @@
 
   function spawnCargo() {
     cargos = [];
+    nextCargoId = 0;
     for (let i = 0; i < CONFIG.cargoCount; i++) {
       const type = cargoTypes[Math.floor(Math.random() * cargoTypes.length)];
       let x = 20 + Math.random() * (CONFIG.worldWidth - 30);
@@ -330,36 +383,7 @@
 
       const y = terrainY(x) - type.r - Math.random() * 0.35;
       const hue = Math.floor((i * 37 + Math.random() * 25) % 360);
-      cargos.push({
-        id: `c${i}`,
-        x, y,
-        vx: 0,
-        vy: 0,
-        angle: Math.random() * Math.PI,
-        av: 0,
-        r: type.r,
-        mass: type.mass,
-        points: type.points,
-        color: `hsl(${hue} 68% 68%)`,
-        accent: `hsl(${(hue + 180) % 360} 78% 36%)`,
-        type: type.name,
-        shape: cargoShapes[i % cargoShapes.length],
-        grabbed: false,
-        stored: false,
-        scored: false,
-        accepting: false,
-        acceptedTimer: 0,
-        targetX: 0,
-        targetY: 0,
-        restTimer: 0,
-        localPos: { x: 0, y: 0 },
-        popDelay: 0,
-        popping: false,
-        ignoreTrayTimer: 0,
-        recyclePadX: 0,
-        recyclePadW: 0,
-        recycleLockTimer: 0,
-      });
+      cargos.push(createCargoPiece(x, y, type, hue, i));
     }
   }
   spawnCargo();
@@ -373,15 +397,96 @@
     explosions: [],
     crunchFx: [],
     audio: null,
+    supplyShips: [],
+    supplySpawnTimer: CONFIG.supplyShipIntervalSec,
   };
 
 
 
 
+  function dropCargoFromSupplyShip(x, y) {
+    const type = cargoTypes[Math.floor(Math.random() * cargoTypes.length)];
+    const safeX = clamp(x, 2 + type.r, CONFIG.worldWidth - 2 - type.r);
+    const hue = Math.floor(Math.random() * 360);
+    const piece = createCargoPiece(safeX, y, type, hue, Math.floor(Math.random() * cargoShapes.length));
+    piece.vx = (Math.random() - 0.5) * 0.8;
+    piece.vy = 0.2 + Math.random() * 0.9;
+    piece.angle = Math.random() * Math.PI * 2;
+    cargos.push(piece);
+  }
+
+  function spawnSupplyShip() {
+    const dir = Math.random() < 0.5 ? 1 : -1;
+    const tm = terrainMetrics();
+    const y = tm.minY - (4.8 + Math.random() * 4.5);
+    const startX = dir > 0 ? -10 : CONFIG.worldWidth + 10;
+    const endX = dir > 0 ? CONFIG.worldWidth + 12 : -12;
+    const speed = 6.3 + Math.random() * 2.2;
+
+    const viewW = W / CONFIG.METER_TO_PX;
+    const onScreenDrop = clamp(game.camera.x + (Math.random() - 0.5) * viewW * 0.35, 8, CONFIG.worldWidth - 8);
+    const drops = [onScreenDrop];
+    while (drops.length < CONFIG.supplyDropsPerShip) {
+      const candidate = 8 + Math.random() * (CONFIG.worldWidth - 16);
+      if (drops.every((x) => Math.abs(x - candidate) > 6.5)) drops.push(candidate);
+    }
+    drops.sort((a, b) => dir > 0 ? a - b : b - a);
+
+    game.supplyShips.push({ x: startX, y, dir, speed, endX, drops, dropped: 0 });
+  }
+
+  function updateSupplyShips(dt) {
+    if (game.state !== 'PLAYING') return;
+
+    game.supplySpawnTimer -= dt;
+    if (game.supplySpawnTimer <= 0) {
+      spawnSupplyShip();
+      game.supplySpawnTimer += CONFIG.supplyShipIntervalSec;
+    }
+
+    for (const craft of game.supplyShips) {
+      craft.x += craft.dir * craft.speed * dt;
+      while (craft.dropped < craft.drops.length) {
+        const targetX = craft.drops[craft.dropped];
+        const reached = craft.dir > 0 ? craft.x >= targetX : craft.x <= targetX;
+        if (!reached) break;
+        dropCargoFromSupplyShip(targetX, craft.y + 0.5);
+        craft.dropped += 1;
+      }
+    }
+
+    game.supplyShips = game.supplyShips.filter((craft) => {
+      const pastEnd = craft.dir > 0 ? craft.x < craft.endX : craft.x > craft.endX;
+      return pastEnd || craft.dropped < craft.drops.length;
+    });
+  }
+
+  function drawSupplyShips() {
+    for (const craft of game.supplyShips) {
+      const s = toScreen(craft.x, craft.y);
+      if (s.x < -60 || s.x > W + 60 || s.y < -40 || s.y > getGameplayHeight() + 20) continue;
+
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.scale(craft.dir, 1);
+      ctx.fillStyle = '#b8c4d7';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 24, 9, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#6f7f96';
+      ctx.fillRect(-16, -2, 20, 4);
+      ctx.fillStyle = '#9ce8ff';
+      ctx.fillRect(5, -1, 12, 2);
+      ctx.restore();
+    }
+  }
+
   function randomizeWorld() {
     terrain = generateTerrain();
     regenerateStars();
     spawnCargo();
+    game.supplyShips = [];
+    game.supplySpawnTimer = CONFIG.supplyShipIntervalSec;
   }
 
   function startMission() {
@@ -402,6 +507,8 @@
     ship.invincibleTimer = 0;
     ship.trayExtended = true;
     ship.traySlide = 1;
+    ship.tracksExtended = false;
+    ship.tracksDeploy = 0;
     ship.angle = 0;
     ship.av = 0;
     randomizeWorld();
@@ -417,8 +524,10 @@
   }
 
   function setShipOnGround() {
-    const skidL = worldFromLocal(ship, shipShape.skidL);
-    const skidR = worldFromLocal(ship, shipShape.skidR);
+    const supportLLocal = { x: shipShape.skidL.x, y: shipShape.skidL.y + 0.16 * ship.tracksDeploy };
+    const supportRLocal = { x: shipShape.skidR.x, y: shipShape.skidR.y + 0.16 * ship.tracksDeploy };
+    const skidL = worldFromLocal(ship, supportLLocal);
+    const skidR = worldFromLocal(ship, supportRLocal);
     const gyL = terrainY(skidL.x);
     const gyR = terrainY(skidR.x);
     ship.y += Math.min(gyL - skidL.y, gyR - skidR.y);
@@ -429,8 +538,10 @@
   }
 
   function distanceToGroundMeters() {
-    const skidL = worldFromLocal(ship, shipShape.skidL);
-    const skidR = worldFromLocal(ship, shipShape.skidR);
+    const supportLLocal = { x: shipShape.skidL.x, y: shipShape.skidL.y + 0.16 * ship.tracksDeploy };
+    const supportRLocal = { x: shipShape.skidR.x, y: shipShape.skidR.y + 0.16 * ship.tracksDeploy };
+    const skidL = worldFromLocal(ship, supportLLocal);
+    const skidR = worldFromLocal(ship, supportRLocal);
     const dL = terrainY(skidL.x) - skidL.y;
     const dR = terrainY(skidR.x) - skidR.y;
     return Math.max(0, Math.min(dL, dR));
@@ -605,6 +716,8 @@
     ship.invincibleTimer = 0;
     ship.trayExtended = false;
     ship.traySlide = 0;
+    ship.tracksExtended = false;
+    ship.tracksDeploy = 0;
     setShipOnGround();
     game.camera.x = ship.x;
     game.camera.y = ship.y - 6;
@@ -613,11 +726,24 @@
   }
 
   function updateInput(dt) {
-    if (keys.has('KeyA')) ship.av -= CONFIG.torqueAccel * dt;
-    if (keys.has('KeyD')) ship.av += CONFIG.torqueAccel * dt;
+    const tracksLock = ship.tracksExtended || ship.tracksDeploy > 0.05;
+    const tracksDriving = ship.tracksDeploy > 0.6 && ship.landed;
 
-    if (keys.has('KeyW')) ship.throttle = clamp(ship.throttle + CONFIG.throttleRampPerSec * dt, 0, 1);
-    if (keys.has('KeyS')) ship.throttle = clamp(ship.throttle - CONFIG.throttleRampPerSec * dt, 0, 1);
+    if (tracksDriving) {
+      ship.throttle = 0;
+      if (keys.has('KeyA')) ship.vx -= CONFIG.trackDriveAccel * dt;
+      if (keys.has('KeyD')) ship.vx += CONFIG.trackDriveAccel * dt;
+      ship.vx = clamp(ship.vx, -CONFIG.trackDriveMaxSpeed, CONFIG.trackDriveMaxSpeed);
+      ship.av *= 0.75;
+    } else if (!tracksLock) {
+      if (keys.has('KeyA')) ship.av -= CONFIG.torqueAccel * dt;
+      if (keys.has('KeyD')) ship.av += CONFIG.torqueAccel * dt;
+
+      if (keys.has('KeyW')) ship.throttle = clamp(ship.throttle + CONFIG.throttleRampPerSec * dt, 0, 1);
+      if (keys.has('KeyS')) ship.throttle = clamp(ship.throttle - CONFIG.throttleRampPerSec * dt, 0, 1);
+    } else {
+      ship.throttle = 0;
+    }
 
     if (keys.has('KeyK')) ship.baseAngle -= CONFIG.baseRate * dt;
     if (keys.has('KeyL')) ship.baseAngle += CONFIG.baseRate * dt;
@@ -635,6 +761,8 @@
 
   function updateShip(dt) {
     ship.invincibleTimer = Math.max(0, ship.invincibleTimer - dt);
+    if (!ship.landed && ship.tracksExtended) ship.tracksExtended = false;
+    ship.tracksDeploy = lerp(ship.tracksDeploy, ship.tracksExtended ? 1 : 0, clamp(CONFIG.trackDeployRate * dt, 0, 1));
 
     const recyclePadUnderShip = terrain.pads.find((p) => p.kind === 'recycle' && Math.abs(ship.x - p.x) <= p.w * 0.45);
     if (ship.landed && recyclePadUnderShip) {
@@ -653,8 +781,11 @@
       ship.fuel = clamp(ship.fuel - burn, 0, 100);
     }
 
+    const tracksLock = ship.tracksExtended || ship.tracksDeploy > 0.05;
+    const tracksDriving = ship.tracksDeploy > 0.6;
     let thrust = 0;
-    if (ship.fuel > 0) thrust = CONFIG.thrustMax * ship.throttle;
+    if (!tracksLock && ship.fuel > 0) thrust = CONFIG.thrustMax * ship.throttle;
+    if (tracksLock) ship.throttle = 0;
 
     const thrustDir = rotate({ x: 0, y: -1 }, ship.angle);
     ship.vx += (thrustDir.x * thrust / mass) * dt;
@@ -691,8 +822,10 @@
       if (ship.vy > 0) ship.vy = 0;
     }
 
-    const skidL = worldFromLocal(ship, shipShape.skidL);
-    const skidR = worldFromLocal(ship, shipShape.skidR);
+    const supportLLocal = { x: shipShape.skidL.x, y: shipShape.skidL.y + 0.16 * ship.tracksDeploy };
+    const supportRLocal = { x: shipShape.skidR.x, y: shipShape.skidR.y + 0.16 * ship.tracksDeploy };
+    const skidL = worldFromLocal(ship, supportLLocal);
+    const skidR = worldFromLocal(ship, supportRLocal);
     const hullCenter = { x: ship.x, y: ship.y };
 
     if (ship.invincibleTimer <= 0) {
@@ -752,6 +885,10 @@
     if (hullHitTerrain && !hasSkid && Math.abs(ship.vy) > CONFIG.landingMaxVY * CONFIG.impactRobustness) return crashShip('hull-terrain');
 
     ship.landed = hasSkid && angleOk && speedOk && (verticalOk || ship.settleLock);
+    if (tracksDriving && ship.landed) {
+      ship.angle = lerp(ship.angle, 0, clamp(8 * dt, 0, 1));
+      ship.av *= 0.4;
+    }
     if (ship.landed) {
       const landingRecyclePad = terrain.pads.find((p) => p.kind === 'recycle' && Math.abs(ship.x - p.x) <= p.w * 0.45);
       if (landingRecyclePad) ship.invincibleTimer = Math.max(ship.invincibleTimer, 0.2);
@@ -760,7 +897,7 @@
       ship.settleLock = true;
       ship.vx *= 0.93;
       ship.av *= 0.85;
-      const ground = Math.min(terrainY(skidL.x) - shipShape.skidL.y, terrainY(skidR.x) - shipShape.skidR.y);
+      const ground = Math.min(terrainY(skidL.x) - supportLLocal.y, terrainY(skidR.x) - supportRLocal.y);
       ship.y = Math.min(ship.y, ground);
     }
 
@@ -1266,6 +1403,24 @@
     ctx.lineTo((shipShape.skidR.x + 0.22) * m, shipShape.skidR.y * m);
     ctx.stroke();
 
+    if (ship.tracksDeploy > 0.02) {
+      const trackY = (shipShape.skidL.y + 0.06) * m;
+      const trackH = (0.12 + 0.08 * ship.tracksDeploy) * m;
+      const trackW = 0.52 * m;
+      const treadInset = 0.05 * m;
+      ctx.fillStyle = '#444f5d';
+      ctx.strokeStyle = '#1f2732';
+      ctx.lineWidth = 2;
+      for (const side of [-1, 1]) {
+        const cx = side * 0.48 * m - trackW * 0.5;
+        ctx.fillRect(cx, trackY, trackW, trackH);
+        ctx.strokeRect(cx, trackY, trackW, trackH);
+        ctx.fillStyle = '#7f8a96';
+        ctx.fillRect(cx + treadInset, trackY + trackH * 0.38, trackW - treadInset * 2, trackH * 0.24);
+        ctx.fillStyle = '#444f5d';
+      }
+    }
+
     // Crane segments
     const base = shipShape.craneBase;
     const bAng = -Math.PI / 2 + ship.baseAngle;
@@ -1580,6 +1735,7 @@
         'M / N  - ARM SEGMENT 2 UP / DOWN',
         'K / L  - ARM BASE CCW / CW',
         ', / .  - CLAW CLOSE / OPEN',
+        'Q      - TOGGLE TRACK MODE (LANDED)',
         'SAFE LANDING: SKIDS ONLY, LOW SPEED',
         'LAND ON REFUEL PAD TO REFILL FUEL',
         'LAND ON RECYCLE PAD TO DELIVER CARGO',
@@ -1603,6 +1759,7 @@
       } else if (game.state === 'PLAYING') {
         updateShip(dt);
         updateCargo(dt);
+        updateSupplyShips(dt);
         updateCamera(dt);
       } else if (game.state === 'READY') {
         updateCamera(dt);
@@ -1612,6 +1769,7 @@
     }
 
     drawBackground();
+    drawSupplyShips();
     drawTerrainAndPads();
     for (const c of cargos) {
       if (c.scored) continue;
