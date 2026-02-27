@@ -114,11 +114,12 @@
       }
     }
     if (e.code === 'KeyQ' && game.state === 'PLAYING') {
-      const canToggleOn = !ship.tracksExtended && ship.landed && ship.throttle < 0.02 && Math.hypot(ship.vx, ship.vy) < 0.45 && ship.gearDeploy < 0.05 && !ship.gearExtended;
+      const canToggleOn = !ship.tracksExtended && ship.landed && ship.throttle < 0.02 && Math.hypot(ship.vx, ship.vy) < 0.45;
       const canToggleOff = ship.tracksExtended && ship.landed && Math.hypot(ship.vx, ship.vy) < 0.9;
       if (canToggleOn) {
         ship.tracksExtended = true;
         ship.throttle = 0;
+        ship.gearExtended = false;
       } else if (canToggleOff) {
         ship.tracksExtended = false;
         ship.gearExtended = true;
@@ -296,7 +297,7 @@
   }
 
   function getSupportLocals() {
-    const gearExtra = shipShape.skidL.y * 0.6 * ship.gearDeploy;
+    const gearExtra = shipShape.skidL.y * 0.3 * ship.gearDeploy;
     const trackExtra = 0.16 * ship.tracksDeploy;
     return {
       left: { x: shipShape.skidL.x, y: shipShape.skidL.y + gearExtra + trackExtra },
@@ -909,7 +910,8 @@
       ship.settleLock = false;
     }
 
-    if (hasSkid && !tracksDriving && ship.gearDeploy < 0.85) {
+    const transitioningToTracks = ship.tracksExtended || ship.tracksDeploy > 0.05;
+    if (hasSkid && !tracksDriving && !transitioningToTracks && ship.gearDeploy < 0.85) {
       return crashShip('no-landing-gear');
     }
 
@@ -1479,7 +1481,6 @@
 
       // One solid grey leg per side, each connected only to its own foot.
       const armTopY = (shipShape.skidL.y - 0.28) * m;
-      const armRun = Math.max(0, (footL.y - (shipShape.skidL.y - 0.28)) * m);
       const leftTopX = (shipShape.skidL.x - 0.02) * m;
       const rightTopX = (shipShape.skidR.x + 0.02) * m;
       const leftFootCenterX = shipShape.skidL.x * m;
@@ -1489,9 +1490,9 @@
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.moveTo(leftTopX, armTopY);
-      ctx.lineTo(leftFootCenterX - armRun, footL.y * m);
+      ctx.lineTo(leftFootCenterX, footL.y * m);
       ctx.moveTo(rightTopX, armTopY);
-      ctx.lineTo(rightFootCenterX + armRun, footR.y * m);
+      ctx.lineTo(rightFootCenterX, footR.y * m);
       ctx.stroke();
     }
 
@@ -1846,7 +1847,7 @@
         'M / N  - ARM SEGMENT 2 UP / DOWN',
         'K / L  - ARM BASE CCW / CW',
         ', / .  - CLAW CLOSE / OPEN',
-        'Q      - TRACK MODE (LANDED, GEAR UP)',
+        'Q      - TRACK MODE (LANDED)',
         'E      - TOGGLE LANDING GEAR',
         'SAFE LANDING: SKIDS ONLY, LOW SPEED',
         'LAND ON REFUEL PAD TO REFILL FUEL',
