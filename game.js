@@ -805,9 +805,12 @@
     ship.invincibleTimer = Math.max(0, ship.invincibleTimer - dt);
     ship.gearSafetyTimer = Math.max(0, ship.gearSafetyTimer - dt);
     if (ship.tracksExtended && ship.gearExtended) ship.gearExtended = false;
-    ship.tracksDeploy = lerp(ship.tracksDeploy, ship.tracksExtended ? 1 : 0, clamp(CONFIG.trackDeployRate * dt, 0, 1));
+    const enteringVehicleMode = ship.tracksExtended;
+    const trackDeployRate = CONFIG.trackDeployRate * (enteringVehicleMode ? 0.5 : 1);
+    ship.tracksDeploy = lerp(ship.tracksDeploy, ship.tracksExtended ? 1 : 0, clamp(trackDeployRate * dt, 0, 1));
     const gearTarget = ship.gearExtended && !ship.tracksExtended && ship.tracksDeploy < 0.05 ? 1 : 0;
-    const gearRate = ship.tracksExtended ? CONFIG.trackDeployRate : CONFIG.landingGearRate;
+    const gearRateBase = ship.tracksExtended ? CONFIG.trackDeployRate : CONFIG.landingGearRate;
+    const gearRate = gearTarget < ship.gearDeploy && enteringVehicleMode ? gearRateBase * 0.5 : gearRateBase;
     ship.gearDeploy = lerp(ship.gearDeploy, gearTarget, clamp(gearRate * dt, 0, 1));
 
     const recyclePadUnderShip = terrain.pads.find((p) => p.kind === 'recycle' && Math.abs(ship.x - p.x) <= p.w * 0.45);
