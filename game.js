@@ -1798,9 +1798,15 @@
     ctx.fillText('ATTITUDE', gx - 30, panelY + 16);
 
     const dX = attitudeX + attitudePanelW + gap;
-    const totalW = Math.max(280, W - dX - pad);
-    const scoreW = Math.min(220, Math.max(150, totalW * 0.3));
-    const distW = totalW - scoreW - gap;
+    const totalW = Math.max(420, W - dX - pad);
+    const scoreW = Math.min(220, Math.max(150, totalW * 0.23));
+
+    // 50% wider mini-map target than the original design.
+    const targetMapW = clamp(Math.floor(W * 0.33), 270, 420);
+    const minDistW = 180;
+    const maxMapW = Math.max(150, totalW - scoreW - gap * 2 - minDistW);
+    const mapW = Math.max(150, Math.min(targetMapW, maxMapW));
+    const distW = Math.max(minDistW, totalW - scoreW - mapW - gap * 2);
 
     ctx.fillStyle = '#000';
     ctx.fillRect(dX, panelY, distW, panelH);
@@ -1813,7 +1819,10 @@
     ctx.font = 'bold 44px "Consolas", monospace';
     ctx.fillText(`${dist.toFixed(1)} m`, dX + 12, panelY + panelH * 0.72);
 
-    const scoreX = dX + distW + gap;
+    const mapX = dX + distW + gap;
+    drawMiniMapInPanel(mapX, panelY, mapW, panelH);
+
+    const scoreX = mapX + mapW + gap;
     ctx.fillStyle = '#000';
     ctx.fillRect(scoreX, panelY, scoreW, panelH);
     ctx.strokeStyle = '#0b5';
@@ -1828,12 +1837,14 @@
 
 
 
-  function drawMiniMap() {
-    const gameplayH = getGameplayHeight();
-    const mapW = Math.min(280, Math.max(180, Math.floor(W * 0.22)));
-    const mapH = Math.min(170, Math.max(110, Math.floor(gameplayH * 0.23)));
-    const mapX = W - mapW - 16;
-    const mapY = 14;
+  function drawMiniMapInPanel(panelX, panelY, panelW, panelH) {
+    const mapPadX = 8;
+    const mapPadTop = 18;
+    const mapPadBottom = 8;
+    const mapX = panelX + mapPadX;
+    const mapY = panelY + mapPadTop;
+    const mapW = Math.max(60, panelW - mapPadX * 2);
+    const mapH = Math.max(36, panelH - mapPadTop - mapPadBottom);
     const tm = terrainMetrics();
     const mapTopWorldY = tm.minY - tm.height * 2.2;
     const mapBottomWorldY = tm.maxY + 1.6;
@@ -1841,35 +1852,30 @@
     const mapWorldX = (x) => mapX + (x / CONFIG.worldWidth) * mapW;
     const mapWorldY = (y) => mapY + ((y - mapTopWorldY) / Math.max(0.01, mapBottomWorldY - mapTopWorldY)) * mapH;
 
-    ctx.save();
-    ctx.fillStyle = 'rgba(8,12,20,0.78)';
-    ctx.fillRect(mapX, mapY, mapW, mapH);
-    ctx.strokeStyle = '#49627e';
+    ctx.fillStyle = '#000';
+    ctx.fillRect(panelX, panelY, panelW, panelH);
+    ctx.strokeStyle = '#0b5';
     ctx.lineWidth = 2;
-    ctx.strokeRect(mapX, mapY, mapW, mapH);
+    ctx.strokeRect(panelX, panelY, panelW, panelH);
 
     // Terrain profile and fill.
     ctx.beginPath();
     const first = terrain.points[0];
     ctx.moveTo(mapWorldX(first.x), mapWorldY(first.y));
-    for (const pt of terrain.points) {
-      ctx.lineTo(mapWorldX(pt.x), mapWorldY(pt.y));
-    }
+    for (const pt of terrain.points) ctx.lineTo(mapWorldX(pt.x), mapWorldY(pt.y));
     ctx.lineTo(mapX + mapW, mapY + mapH);
     ctx.lineTo(mapX, mapY + mapH);
     ctx.closePath();
     ctx.fillStyle = 'rgba(110,120,138,0.55)';
     ctx.fill();
+
     ctx.strokeStyle = '#c5cfdf';
     ctx.lineWidth = 1.2;
     ctx.beginPath();
     ctx.moveTo(mapWorldX(first.x), mapWorldY(first.y));
-    for (const pt of terrain.points) {
-      ctx.lineTo(mapWorldX(pt.x), mapWorldY(pt.y));
-    }
+    for (const pt of terrain.points) ctx.lineTo(mapWorldX(pt.x), mapWorldY(pt.y));
     ctx.stroke();
 
-    // Pads.
     for (const pad of terrain.pads) {
       const px = mapWorldX(pad.x - pad.w * 0.5);
       const pw = Math.max(3, (pad.w / CONFIG.worldWidth) * mapW);
@@ -1878,7 +1884,6 @@
       ctx.fillRect(px, py, pw, 4);
     }
 
-    // Ship marker.
     const shipX = mapWorldX(clamp(ship.x, 0, CONFIG.worldWidth));
     const shipY = mapWorldY(clamp(ship.y, mapTopWorldY, mapBottomWorldY));
     ctx.fillStyle = '#ff6b6b';
@@ -1889,12 +1894,12 @@
     ctx.lineWidth = 1;
     ctx.stroke();
 
-    ctx.fillStyle = '#d5e8ff';
-    ctx.font = 'bold 11px Segoe UI';
+    ctx.fillStyle = '#7dff9c';
+    ctx.font = 'bold 12px Segoe UI';
     ctx.textAlign = 'left';
-    ctx.fillText('MINI MAP', mapX + 8, mapY + 14);
-    ctx.restore();
+    ctx.fillText('MINI MAP', panelX + 8, panelY + 14);
   }
+
 
   function drawLeftInfoPanel(title, lines) {
     const panelW = Math.min(860, Math.max(420, Math.floor(W * 0.8)));
@@ -2022,7 +2027,6 @@
 
 
     drawBottomConsole();
-    drawMiniMap();
 
     if (game.showHelp) {
       drawLeftInfoPanel('MISSION CONTROLS', [
