@@ -46,7 +46,7 @@
     trackDeployRate: 5.5,
     trackDriveAccel: 4.8,
     trackDriveMaxSpeed: 1.35,
-    landingGearRate: 5.2,
+    landingGearTransitionSec: 2,
   };
 
   const canvas = document.getElementById('gameCanvas');
@@ -139,6 +139,10 @@
 
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const lerp = (a, b, t) => a + (b - a) * t;
+  const moveTowards = (value, target, maxDelta) => {
+    if (Math.abs(target - value) <= maxDelta) return target;
+    return value + Math.sign(target - value) * maxDelta;
+  };
 
   function rotate(v, a) {
     const c = Math.cos(a), s = Math.sin(a);
@@ -816,20 +820,20 @@
     if (swapToTracks) {
       // Entering vehicle mode sequence: gear retracts first, then tracks extend.
       const gearStepDone = ship.gearDeploy <= 0.02;
-      ship.gearDeploy = lerp(ship.gearDeploy, 0, clamp(swapRate * dt, 0, 1));
+      ship.gearDeploy = moveTowards(ship.gearDeploy, 0, dt / CONFIG.landingGearTransitionSec);
       if (gearStepDone) ship.tracksDeploy = lerp(ship.tracksDeploy, 1, clamp(swapRate * dt, 0, 1));
       else ship.tracksDeploy = lerp(ship.tracksDeploy, 0, clamp(swapRate * dt, 0, 1));
     } else {
       // Exiting vehicle mode sequence: tracks retract first, then gear follows manual target.
       const trackStepDone = ship.tracksDeploy <= 0.02;
       ship.tracksDeploy = lerp(ship.tracksDeploy, 0, clamp(swapRate * dt, 0, 1));
-      if (trackStepDone) ship.gearDeploy = lerp(ship.gearDeploy, ship.gearExtended ? 1 : 0, clamp(swapRate * dt, 0, 1));
-      else ship.gearDeploy = lerp(ship.gearDeploy, 0, clamp(swapRate * dt, 0, 1));
+      if (trackStepDone) ship.gearDeploy = moveTowards(ship.gearDeploy, ship.gearExtended ? 1 : 0, dt / CONFIG.landingGearTransitionSec);
+      else ship.gearDeploy = moveTowards(ship.gearDeploy, 0, dt / CONFIG.landingGearTransitionSec);
     }
 
     // Manual gear toggle outside track mode.
     if (!modeTransitionActive && !ship.tracksExtended) {
-      ship.gearDeploy = lerp(ship.gearDeploy, ship.gearExtended ? 1 : 0, clamp(CONFIG.landingGearRate * dt, 0, 1));
+      ship.gearDeploy = moveTowards(ship.gearDeploy, ship.gearExtended ? 1 : 0, dt / CONFIG.landingGearTransitionSec);
     }
 
     // Ensure transitions fully complete (avoid asymptotic lingering).
