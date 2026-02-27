@@ -301,8 +301,8 @@
   function getSupportLocals() {
     const gearExtra = shipShape.skidL.y * 0.3 * ship.gearDeploy;
     const trackExtra = 0.16 * ship.tracksDeploy;
-    const transitionBlend = 1 - Math.abs(ship.tracksDeploy * 2 - 1);
-    const transitionDrop = 0.06 * transitionBlend;
+    const unsupportedBlend = (1 - ship.gearDeploy) * (1 - ship.tracksDeploy);
+    const transitionDrop = 0.14 * unsupportedBlend;
     return {
       left: { x: shipShape.skidL.x, y: shipShape.skidL.y + gearExtra + trackExtra + transitionDrop },
       right: { x: shipShape.skidR.x, y: shipShape.skidR.y + gearExtra + trackExtra + transitionDrop },
@@ -807,22 +807,35 @@
     ship.invincibleTimer = Math.max(0, ship.invincibleTimer - dt);
     ship.gearSafetyTimer = Math.max(0, ship.gearSafetyTimer - dt);
     if (ship.tracksExtended && ship.gearExtended) ship.gearExtended = false;
-    const tracksTarget = ship.tracksExtended ? 1 : 0;
-    const gearTargetFromMode = ship.tracksExtended ? 0 : 1;
-    const modeTransitionRequested = ship.gearExtended === !ship.tracksExtended;
-    const modeTransitionActive = modeTransitionRequested && (Math.abs(ship.tracksDeploy - tracksTarget) > 0.01 || Math.abs(ship.gearDeploy - gearTargetFromMode) > 0.01);
+    const swapToTracks = ship.tracksExtended;
+    const modeTransitionActive = swapToTracks
+      ? (ship.gearDeploy > 0.001 || ship.tracksDeploy < 0.999)
+      : (ship.tracksDeploy > 0.001 || ship.gearDeploy < 0.999);
 
-    const trackDeployRate = CONFIG.trackDeployRate * (modeTransitionActive ? 0.5 : 1);
-    ship.tracksDeploy = lerp(ship.tracksDeploy, tracksTarget, clamp(trackDeployRate * dt, 0, 1));
+    const swapRate = CONFIG.trackDeployRate * (modeTransitionActive ? 0.5 : 1);
+    if (swapToTracks) {
+      // Entering vehicle mode sequence: gear retracts first, then tracks extend.
+      const gearStepDone = ship.gearDeploy <= 0.02;
+      ship.gearDeploy = lerp(ship.gearDeploy, 0, clamp(swapRate * dt, 0, 1));
+      if (gearStepDone) ship.tracksDeploy = lerp(ship.tracksDeploy, 1, clamp(swapRate * dt, 0, 1));
+      else ship.tracksDeploy = lerp(ship.tracksDeploy, 0, clamp(swapRate * dt, 0, 1));
+    } else {
+      // Exiting vehicle mode sequence: tracks retract first, then gear extends.
+      const trackStepDone = ship.tracksDeploy <= 0.02;
+      ship.tracksDeploy = lerp(ship.tracksDeploy, 0, clamp(swapRate * dt, 0, 1));
+      if (trackStepDone) ship.gearDeploy = lerp(ship.gearDeploy, 1, clamp(swapRate * dt, 0, 1));
+      else ship.gearDeploy = lerp(ship.gearDeploy, 0, clamp(swapRate * dt, 0, 1));
+    }
 
-    const gearTarget = modeTransitionActive ? gearTargetFromMode : (ship.gearExtended ? 1 : 0);
-    const gearRateBase = modeTransitionActive ? CONFIG.trackDeployRate : CONFIG.landingGearRate;
-    const gearRate = gearRateBase * (modeTransitionActive ? 0.5 : 1);
-    ship.gearDeploy = lerp(ship.gearDeploy, gearTarget, clamp(gearRate * dt, 0, 1));
+    // Manual gear toggle outside track mode.
+    if (!modeTransitionActive && !ship.tracksExtended) {
+      ship.gearDeploy = lerp(ship.gearDeploy, ship.gearExtended ? 1 : 0, clamp(CONFIG.landingGearRate * dt, 0, 1));
+    }
 
     // Ensure transitions fully complete (avoid asymptotic lingering).
-    if (Math.abs(ship.tracksDeploy - tracksTarget) < 0.001) ship.tracksDeploy = tracksTarget;
-    if (Math.abs(ship.gearDeploy - gearTarget) < 0.001) ship.gearDeploy = gearTarget;
+    if (Math.abs(ship.tracksDeploy - (ship.tracksExtended ? 1 : 0)) < 0.001) ship.tracksDeploy = ship.tracksExtended ? 1 : 0;
+    if (!ship.tracksExtended && Math.abs(ship.gearDeploy - (ship.gearExtended ? 1 : 0)) < 0.001) ship.gearDeploy = ship.gearExtended ? 1 : 0;
+    if (ship.tracksExtended && Math.abs(ship.gearDeploy) < 0.001) ship.gearDeploy = 0;
 
     const recyclePadUnderShip = terrain.pads.find((p) => p.kind === 'recycle' && Math.abs(ship.x - p.x) <= p.w * 0.45);
     if (ship.landed && recyclePadUnderShip) {
@@ -930,8 +943,9 @@
       ship.settleLock = false;
     }
 
-    const transitioningToTracks = ship.tracksExtended || ship.tracksDeploy > 0.05;
-    if (hasSkid && !tracksDriving && !transitioningToTracks && ship.gearSafetyTimer <= 0 && ship.gearDeploy < 0.85) {
+    const supportSwapActive = (ship.tracksExtended && (ship.gearDeploy > 0.02 || ship.tracksDeploy < 0.98))
+      || (!ship.tracksExtended && (ship.tracksDeploy > 0.02 || ship.gearDeploy < 0.98));
+    if (hasSkid && !tracksDriving && !supportSwapActive && ship.gearSafetyTimer <= 0 && ship.gearDeploy < 0.85) {
       return crashShip('no-landing-gear');
     }
 
