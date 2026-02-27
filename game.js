@@ -404,9 +404,21 @@
 
 
 
+  function pickDropXAvoidPads(preferredX, radius, margin = 0.55) {
+    const clamped = clamp(preferredX, 2 + radius, CONFIG.worldWidth - 2 - radius);
+    if (!xOverlapsAnyPad(clamped, radius + margin)) return clamped;
+
+    for (let i = 0; i < 50; i++) {
+      const candidate = 4 + Math.random() * (CONFIG.worldWidth - 8);
+      const safe = clamp(candidate, 2 + radius, CONFIG.worldWidth - 2 - radius);
+      if (!xOverlapsAnyPad(safe, radius + margin)) return safe;
+    }
+    return clamped;
+  }
+
   function dropCargoFromSupplyShip(x, y) {
     const type = cargoTypes[Math.floor(Math.random() * cargoTypes.length)];
-    const safeX = clamp(x, 2 + type.r, CONFIG.worldWidth - 2 - type.r);
+    const safeX = pickDropXAvoidPads(x, type.r);
     const hue = Math.floor(Math.random() * 360);
     const piece = createCargoPiece(safeX, y, type, hue, Math.floor(Math.random() * cargoShapes.length));
     piece.vx = (Math.random() - 0.5) * 0.8;
@@ -414,6 +426,7 @@
     piece.angle = Math.random() * Math.PI * 2;
     cargos.push(piece);
   }
+
 
   function spawnSupplyShip() {
     const dir = Math.random() < 0.5 ? 1 : -1;
@@ -424,10 +437,10 @@
     const speed = 6.3 + Math.random() * 2.2;
 
     const viewW = W / CONFIG.METER_TO_PX;
-    const onScreenDrop = clamp(game.camera.x + (Math.random() - 0.5) * viewW * 0.35, 8, CONFIG.worldWidth - 8);
+    const onScreenDrop = pickDropXAvoidPads(game.camera.x + (Math.random() - 0.5) * viewW * 0.35, 0.26);
     const drops = [onScreenDrop];
     while (drops.length < CONFIG.supplyDropsPerShip) {
-      const candidate = 8 + Math.random() * (CONFIG.worldWidth - 16);
+      const candidate = pickDropXAvoidPads(8 + Math.random() * (CONFIG.worldWidth - 16), 0.26);
       if (drops.every((x) => Math.abs(x - candidate) > 6.5)) drops.push(candidate);
     }
     drops.sort((a, b) => dir > 0 ? a - b : b - a);
@@ -761,7 +774,6 @@
 
   function updateShip(dt) {
     ship.invincibleTimer = Math.max(0, ship.invincibleTimer - dt);
-    if (!ship.landed && ship.tracksExtended) ship.tracksExtended = false;
     ship.tracksDeploy = lerp(ship.tracksDeploy, ship.tracksExtended ? 1 : 0, clamp(CONFIG.trackDeployRate * dt, 0, 1));
 
     const recyclePadUnderShip = terrain.pads.find((p) => p.kind === 'recycle' && Math.abs(ship.x - p.x) <= p.w * 0.45);
@@ -853,7 +865,7 @@
       ship.settleLock = false;
     }
 
-    if (hasSkid && !angleOk) {
+    if (hasSkid && !angleOk && !tracksDriving) {
       return crashShip('bad-landing');
     }
 
@@ -871,7 +883,7 @@
       }
     }
 
-    if (hasSkid && Math.abs(ship.vy) > CONFIG.landingCrashVY * CONFIG.impactRobustness) return crashShip('hard-impact');
+    if (!tracksDriving && hasSkid && Math.abs(ship.vy) > CONFIG.landingCrashVY * CONFIG.impactRobustness) return crashShip('hard-impact');
 
     let hullHitTerrain = false;
     for (const p of shipShape.hullPoints) {
@@ -882,9 +894,9 @@
         break;
       }
     }
-    if (hullHitTerrain && !hasSkid && Math.abs(ship.vy) > CONFIG.landingMaxVY * CONFIG.impactRobustness) return crashShip('hull-terrain');
+    if (!tracksDriving && hullHitTerrain && !hasSkid && Math.abs(ship.vy) > CONFIG.landingMaxVY * CONFIG.impactRobustness) return crashShip('hull-terrain');
 
-    ship.landed = hasSkid && angleOk && speedOk && (verticalOk || ship.settleLock);
+    ship.landed = (tracksDriving && hasSkid) || (hasSkid && angleOk && speedOk && (verticalOk || ship.settleLock));
     if (tracksDriving && ship.landed) {
       ship.angle = lerp(ship.angle, 0, clamp(8 * dt, 0, 1));
       ship.av *= 0.4;
@@ -895,10 +907,16 @@
       ship.vy = Math.min(ship.vy, 0);
       ship.bounceCount = 0;
       ship.settleLock = true;
-      ship.vx *= 0.93;
-      ship.av *= 0.85;
+      if (tracksDriving) {
+        ship.vy = 0;
+        ship.vx *= 0.985;
+        ship.av *= 0.25;
+      } else {
+        ship.vx *= 0.93;
+        ship.av *= 0.85;
+      }
       const ground = Math.min(terrainY(skidL.x) - supportLLocal.y, terrainY(skidR.x) - supportRLocal.y);
-      ship.y = Math.min(ship.y, ground);
+      ship.y = tracksDriving ? ground : Math.min(ship.y, ground);
     }
 
     // Refuel only with safe skid landing on refuel pad.
@@ -1404,20 +1422,38 @@
     ctx.stroke();
 
     if (ship.tracksDeploy > 0.02) {
-      const trackY = (shipShape.skidL.y + 0.06) * m;
-      const trackH = (0.12 + 0.08 * ship.tracksDeploy) * m;
-      const trackW = 0.52 * m;
-      const treadInset = 0.05 * m;
-      ctx.fillStyle = '#444f5d';
-      ctx.strokeStyle = '#1f2732';
-      ctx.lineWidth = 2;
-      for (const side of [-1, 1]) {
-        const cx = side * 0.48 * m - trackW * 0.5;
-        ctx.fillRect(cx, trackY, trackW, trackH);
-        ctx.strokeRect(cx, trackY, trackW, trackH);
-        ctx.fillStyle = '#7f8a96';
-        ctx.fillRect(cx + treadInset, trackY + trackH * 0.38, trackW - treadInset * 2, trackH * 0.24);
-        ctx.fillStyle = '#444f5d';
+      const trackY = (shipShape.skidL.y + 0.02) * m;
+      const trackH = (0.2 + 0.13 * ship.tracksDeploy) * m;
+      const trackW = 0.6 * m;
+      const centerGap = 0.34 * m;
+      const leftX = -centerGap - trackW;
+      const rightX = centerGap;
+      const joinX = leftX + trackW;
+      const joinW = rightX - joinX;
+
+      ctx.fillStyle = '#191c22';
+      ctx.fillRect(leftX, trackY, trackW, trackH);
+      ctx.fillRect(rightX, trackY, trackW, trackH);
+      ctx.fillRect(joinX, trackY + trackH * 0.23, joinW, trackH * 0.54);
+
+      ctx.fillStyle = '#646f7b';
+      const treadInset = 0.06 * m;
+      ctx.fillRect(leftX + treadInset, trackY + trackH * 0.22, trackW - treadInset * 2, trackH * 0.56);
+      ctx.fillRect(rightX + treadInset, trackY + trackH * 0.22, trackW - treadInset * 2, trackH * 0.56);
+      ctx.fillRect(joinX + treadInset * 0.5, trackY + trackH * 0.36, Math.max(0, joinW - treadInset), trackH * 0.28);
+
+      const wheelR = trackH * 0.25;
+      ctx.fillStyle = '#ffffff';
+      const leftCenterX = leftX + trackW * 0.5;
+      const rightCenterX = rightX + trackW * 0.5;
+      const topY = trackY + wheelR + 2;
+      const bottomY = trackY + trackH - wheelR - 2;
+      for (const cx of [leftCenterX, rightCenterX]) {
+        for (const cy of [topY, bottomY]) {
+          ctx.beginPath();
+          ctx.arc(cx, cy, wheelR, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
     }
 
