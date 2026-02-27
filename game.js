@@ -942,17 +942,35 @@
     if (!tracksDriving && hasSkid && Math.abs(ship.vy) > CONFIG.landingCrashVY * CONFIG.impactRobustness) return crashShip('hard-impact');
 
     let hullHitTerrain = false;
+    let hullPenetration = 0;
     for (const p of shipShape.hullPoints) {
       const w = worldFromLocal(ship, p);
       if (w.x < 0 || w.x > CONFIG.worldWidth) continue;
-      if (w.y > terrainY(w.x) - 0.02) {
+      const surfaceY = terrainY(w.x) - 0.02;
+      if (w.y > surfaceY) {
         hullHitTerrain = true;
-        break;
+        hullPenetration = Math.max(hullPenetration, w.y - surfaceY);
       }
     }
-    if (!tracksDriving && hullHitTerrain && !hasSkid && Math.abs(ship.vy) > CONFIG.landingMaxVY * CONFIG.impactRobustness) return crashShip('hull-terrain');
 
-    ship.landed = (tracksDriving && hasSkid) || (hasSkid && angleOk && speedOk && (verticalOk || ship.settleLock));
+    if (hullHitTerrain && hullPenetration > 0) {
+      // Never allow the hull to remain below terrain surface.
+      ship.y -= hullPenetration;
+    }
+
+    if (!tracksDriving && hullHitTerrain && !hasSkid) {
+      const crashV = CONFIG.landingMaxVY * CONFIG.impactRobustness;
+      const crashSpeed = CONFIG.landingMaxSpeed * CONFIG.impactRobustness;
+      if (Math.abs(ship.vy) > crashV || speed > crashSpeed) return crashShip('hull-terrain');
+
+      // Slow collision into terrain resolves as a forced settle/landing.
+      ship.vy = 0;
+      ship.vx *= 0.7;
+      ship.av *= 0.5;
+      ship.settleLock = true;
+    }
+
+    ship.landed = (tracksDriving && hasSkid) || (hasSkid && angleOk && speedOk && (verticalOk || ship.settleLock)) || (!tracksDriving && hullHitTerrain && speed < CONFIG.landingMaxSpeed * CONFIG.impactRobustness);
     if (tracksDriving && ship.landed) {
       ship.angle = lerp(ship.angle, 0, clamp(8 * dt, 0, 1));
       ship.av *= 0.4;
