@@ -1827,6 +1827,75 @@
 
 
 
+
+  function drawMiniMap() {
+    const gameplayH = getGameplayHeight();
+    const mapW = Math.min(280, Math.max(180, Math.floor(W * 0.22)));
+    const mapH = Math.min(170, Math.max(110, Math.floor(gameplayH * 0.23)));
+    const mapX = W - mapW - 16;
+    const mapY = 14;
+    const tm = terrainMetrics();
+    const mapTopWorldY = tm.minY - tm.height * 2.2;
+    const mapBottomWorldY = tm.maxY + 1.6;
+
+    const mapWorldX = (x) => mapX + (x / CONFIG.worldWidth) * mapW;
+    const mapWorldY = (y) => mapY + ((y - mapTopWorldY) / Math.max(0.01, mapBottomWorldY - mapTopWorldY)) * mapH;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(8,12,20,0.78)';
+    ctx.fillRect(mapX, mapY, mapW, mapH);
+    ctx.strokeStyle = '#49627e';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(mapX, mapY, mapW, mapH);
+
+    // Terrain profile and fill.
+    ctx.beginPath();
+    const first = terrain.points[0];
+    ctx.moveTo(mapWorldX(first.x), mapWorldY(first.y));
+    for (const pt of terrain.points) {
+      ctx.lineTo(mapWorldX(pt.x), mapWorldY(pt.y));
+    }
+    ctx.lineTo(mapX + mapW, mapY + mapH);
+    ctx.lineTo(mapX, mapY + mapH);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(110,120,138,0.55)';
+    ctx.fill();
+    ctx.strokeStyle = '#c5cfdf';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(mapWorldX(first.x), mapWorldY(first.y));
+    for (const pt of terrain.points) {
+      ctx.lineTo(mapWorldX(pt.x), mapWorldY(pt.y));
+    }
+    ctx.stroke();
+
+    // Pads.
+    for (const pad of terrain.pads) {
+      const px = mapWorldX(pad.x - pad.w * 0.5);
+      const pw = Math.max(3, (pad.w / CONFIG.worldWidth) * mapW);
+      const py = mapWorldY(pad.y) - 2;
+      ctx.fillStyle = pad.kind === 'recycle' ? '#72ff95' : '#78d8ff';
+      ctx.fillRect(px, py, pw, 4);
+    }
+
+    // Ship marker.
+    const shipX = mapWorldX(clamp(ship.x, 0, CONFIG.worldWidth));
+    const shipY = mapWorldY(clamp(ship.y, mapTopWorldY, mapBottomWorldY));
+    ctx.fillStyle = '#ff6b6b';
+    ctx.beginPath();
+    ctx.arc(shipX, shipY, 3.8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.fillStyle = '#d5e8ff';
+    ctx.font = 'bold 11px Segoe UI';
+    ctx.textAlign = 'left';
+    ctx.fillText('MINI MAP', mapX + 8, mapY + 14);
+    ctx.restore();
+  }
+
   function drawLeftInfoPanel(title, lines) {
     const panelW = Math.min(860, Math.max(420, Math.floor(W * 0.8)));
     const panelH = Math.min(H - 36, Math.max(320, Math.floor(H * 0.8)));
@@ -1953,7 +2022,7 @@
 
 
     drawBottomConsole();
-
+    drawMiniMap();
 
     if (game.showHelp) {
       drawLeftInfoPanel('MISSION CONTROLS', [
