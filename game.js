@@ -45,7 +45,7 @@
     supplyDropsPerShip: 4,
     trackDeployRate: 5.5,
     trackDriveAccel: 4.8,
-    trackDriveMaxSpeed: 2.7,
+    trackDriveMaxSpeed: 1.35,
     landingGearRate: 5.2,
   };
 
@@ -1445,6 +1445,26 @@
     const m = CONFIG.METER_TO_PX;
 
     const flame = ship.fuel > 0 ? ship.throttle : 0;
+
+    const rotateLeftFx = game.state === 'PLAYING' && keys.has('KeyA');
+    const rotateRightFx = game.state === 'PLAYING' && keys.has('KeyD');
+    if (rotateLeftFx || rotateRightFx) {
+      ctx.strokeStyle = '#ff9f6a';
+      ctx.lineWidth = 2.4;
+      if (rotateLeftFx) {
+        ctx.beginPath();
+        ctx.moveTo(0.9 * m, -0.12 * m);
+        ctx.lineTo(1.18 * m + Math.random() * 6, (-0.12 + (Math.random() - 0.5) * 0.06) * m);
+        ctx.stroke();
+      }
+      if (rotateRightFx) {
+        ctx.beginPath();
+        ctx.moveTo(-0.9 * m, -0.12 * m);
+        ctx.lineTo(-1.18 * m - Math.random() * 6, (-0.12 + (Math.random() - 0.5) * 0.06) * m);
+        ctx.stroke();
+      }
+    }
+
     if (flame > 0.02) {
       ctx.strokeStyle = '#ffbf66';
       ctx.lineWidth = 3;
