@@ -820,6 +820,10 @@
     const gearRate = gearRateBase * (modeTransitionActive ? 0.5 : 1);
     ship.gearDeploy = lerp(ship.gearDeploy, gearTarget, clamp(gearRate * dt, 0, 1));
 
+    // Ensure transitions fully complete (avoid asymptotic lingering).
+    if (Math.abs(ship.tracksDeploy - tracksTarget) < 0.001) ship.tracksDeploy = tracksTarget;
+    if (Math.abs(ship.gearDeploy - gearTarget) < 0.001) ship.gearDeploy = gearTarget;
+
     const recyclePadUnderShip = terrain.pads.find((p) => p.kind === 'recycle' && Math.abs(ship.x - p.x) <= p.w * 0.45);
     if (ship.landed && recyclePadUnderShip) {
       ship.invincibleTimer = Math.max(ship.invincibleTimer, 0.2);
@@ -1509,7 +1513,7 @@
     const rightFootCenterY = footR.y * m;
 
     // 45-degree support arms (one per side), rendered behind the hull.
-    if (ship.gearDeploy > 0.02) {
+    if (ship.gearDeploy > 0.001) {
       const legDropL = Math.max(0, leftFootCenterY - armTopY);
       const legDropR = Math.max(0, rightFootCenterY - armTopY);
       const leftTopX = leftFootCenterX + legDropL;
@@ -1526,7 +1530,7 @@
     }
 
     const trackY = (shipShape.skidL.y + 0.02) * m;
-    const trackH = (0.2 + 0.13 * ship.tracksDeploy) * m;
+    const trackH = (0.33 * ship.tracksDeploy) * m;
     const trackW = 0.6 * m;
     const centerGap = 0.34 * m;
     const leftTrackX = -centerGap - trackW;
@@ -1535,7 +1539,7 @@
     const joinW = rightTrackX - joinX;
 
     // Track support legs, rendered behind the hull so they look under-mounted.
-    if (ship.tracksDeploy > 0.02) {
+    if (ship.tracksDeploy > 0.001) {
       const trackTopY = trackY;
       const leftTrackCenterX = leftTrackX + trackW * 0.5;
       const rightTrackCenterX = rightTrackX + trackW * 0.5;
@@ -1572,14 +1576,14 @@
     ctx.fillText('Recycle', 0, -0.16 * m);
     ctx.fillText('Hero', 0, 0.02 * m);
 
-    if (ship.gearDeploy > 0.02) {
+    if (ship.gearDeploy > 0.001) {
       // Feet (bright red), centered at each leg endpoint.
       ctx.fillStyle = '#ff2a2a';
       ctx.fillRect(leftFootCenterX - footW * 0.5, leftFootCenterY - footH * 0.5, footW, footH);
       ctx.fillRect(rightFootCenterX - footW * 0.5, rightFootCenterY - footH * 0.5, footW, footH);
     }
 
-    if (ship.tracksDeploy > 0.02) {
+    if (ship.tracksDeploy > 0.001) {
       ctx.fillStyle = '#191c22';
       ctx.fillRect(leftTrackX, trackY, trackW, trackH);
       ctx.fillRect(rightTrackX, trackY, trackW, trackH);
@@ -1591,7 +1595,7 @@
       ctx.fillRect(rightTrackX + treadInset, trackY + trackH * 0.22, trackW - treadInset * 2, trackH * 0.56);
       ctx.fillRect(joinX + treadInset * 0.5, trackY + trackH * 0.22, Math.max(0, joinW - treadInset), trackH * 0.56);
 
-      const wheelR = trackH * 0.25;
+      const wheelR = Math.max(1.2, trackH * 0.25);
       ctx.fillStyle = '#ffffff';
       const leftCenterX = leftTrackX + trackW * 0.5;
       const rightCenterX = rightTrackX + trackW * 0.5;
