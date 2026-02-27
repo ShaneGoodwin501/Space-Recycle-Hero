@@ -948,7 +948,7 @@
     }
 
     const supportSwapActive = (ship.tracksExtended && (ship.gearDeploy > 0.02 || ship.tracksDeploy < 0.98))
-      || (!ship.tracksExtended && (ship.tracksDeploy > 0.02 || ship.gearDeploy < 0.98));
+      || (!ship.tracksExtended && ship.tracksDeploy > 0.02);
     if (hasSkid && !tracksDriving && !supportSwapActive && ship.gearSafetyTimer <= 0 && ship.gearDeploy < 0.85) {
       return crashShip('no-landing-gear');
     }
@@ -991,6 +991,8 @@
     }
 
     if (!tracksDriving && hullHitTerrain && !hasSkid) {
+      if (ship.gearDeploy < 0.85) return crashShip('retracted-gear-ground-impact');
+
       const crashV = CONFIG.landingMaxVY * CONFIG.impactRobustness;
       const crashSpeed = CONFIG.landingMaxSpeed * CONFIG.impactRobustness;
       if (Math.abs(ship.vy) > crashV || speed > crashSpeed) return crashShip('hull-terrain');
