@@ -114,12 +114,11 @@
       }
     }
     if (e.code === 'KeyQ' && game.state === 'PLAYING') {
-      const canToggleOn = !ship.tracksExtended && ship.landed && ship.throttle < 0.02 && Math.hypot(ship.vx, ship.vy) < 0.45;
+      const canToggleOn = !ship.tracksExtended && ship.landed && ship.throttle < 0.02 && Math.hypot(ship.vx, ship.vy) < 0.45 && ship.gearDeploy < 0.05 && !ship.gearExtended;
       const canToggleOff = ship.tracksExtended && ship.landed && Math.hypot(ship.vx, ship.vy) < 0.9;
       if (canToggleOn) {
         ship.tracksExtended = true;
         ship.throttle = 0;
-        if (ship.gearExtended) ship.gearExtended = false;
       } else if (canToggleOff) {
         ship.tracksExtended = false;
         ship.gearExtended = true;
@@ -910,6 +909,10 @@
       ship.settleLock = false;
     }
 
+    if (hasSkid && !tracksDriving && ship.gearDeploy < 0.85) {
+      return crashShip('no-landing-gear');
+    }
+
     if (hasSkid && !angleOk && !tracksDriving) {
       return crashShip('bad-landing');
     }
@@ -1460,30 +1463,37 @@
     const supportLocals = getSupportLocals();
     const footL = supportLocals.left;
     const footR = supportLocals.right;
-    ctx.strokeStyle = '#73ffcf';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo((shipShape.skidL.x - 0.22) * m, footL.y * m);
-    ctx.lineTo((shipShape.skidL.x + 0.22) * m, footL.y * m);
-    ctx.moveTo((shipShape.skidR.x - 0.22) * m, footR.y * m);
-    ctx.lineTo((shipShape.skidR.x + 0.22) * m, footR.y * m);
-    ctx.stroke();
 
     if (ship.gearDeploy > 0.02) {
-      const armTopY = (shipShape.skidL.y - 0.2) * m;
+      // Feet
+      ctx.strokeStyle = '#73ffcf';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo((shipShape.skidL.x - 0.22) * m, footL.y * m);
+      ctx.lineTo((shipShape.skidL.x + 0.22) * m, footL.y * m);
+      ctx.moveTo((shipShape.skidR.x - 0.22) * m, footR.y * m);
+      ctx.lineTo((shipShape.skidR.x + 0.22) * m, footR.y * m);
+      ctx.stroke();
+
+      // 45-degree support arms
+      const armTopY = (shipShape.skidL.y - 0.28) * m;
+      const armDrop = footL.y * m - armTopY;
+      const armRun = armDrop;
       ctx.strokeStyle = '#9fb7cf';
       ctx.lineWidth = 2.2;
       ctx.beginPath();
-      ctx.moveTo((shipShape.skidL.x - 0.08) * m, armTopY);
-      ctx.lineTo((shipShape.skidL.x - 0.08) * m, footL.y * m);
-      ctx.moveTo((shipShape.skidL.x + 0.08) * m, armTopY);
-      ctx.lineTo((shipShape.skidL.x + 0.08) * m, footL.y * m);
-      ctx.moveTo((shipShape.skidR.x - 0.08) * m, armTopY);
-      ctx.lineTo((shipShape.skidR.x - 0.08) * m, footR.y * m);
-      ctx.moveTo((shipShape.skidR.x + 0.08) * m, armTopY);
-      ctx.lineTo((shipShape.skidR.x + 0.08) * m, footR.y * m);
+      ctx.moveTo((shipShape.skidL.x - 0.02) * m, armTopY);
+      ctx.lineTo((shipShape.skidL.x - 0.02) * m - armRun, footL.y * m);
+      ctx.moveTo((shipShape.skidL.x + 0.02) * m, armTopY);
+      ctx.lineTo((shipShape.skidL.x + 0.02) * m + armRun, footL.y * m);
+
+      ctx.moveTo((shipShape.skidR.x - 0.02) * m, armTopY);
+      ctx.lineTo((shipShape.skidR.x - 0.02) * m - armRun, footR.y * m);
+      ctx.moveTo((shipShape.skidR.x + 0.02) * m, armTopY);
+      ctx.lineTo((shipShape.skidR.x + 0.02) * m + armRun, footR.y * m);
       ctx.stroke();
     }
+
 
     if (ship.tracksDeploy > 0.02) {
       const trackY = (shipShape.skidL.y + 0.02) * m;
@@ -1835,7 +1845,7 @@
         'M / N  - ARM SEGMENT 2 UP / DOWN',
         'K / L  - ARM BASE CCW / CW',
         ', / .  - CLAW CLOSE / OPEN',
-        'Q      - TOGGLE TRACK MODE (LANDED)',
+        'Q      - TRACK MODE (LANDED, GEAR UP)',
         'E      - TOGGLE LANDING GEAR',
         'SAFE LANDING: SKIDS ONLY, LOW SPEED',
         'LAND ON REFUEL PAD TO REFILL FUEL',
