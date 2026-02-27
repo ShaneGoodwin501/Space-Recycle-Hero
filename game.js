@@ -1524,14 +1524,16 @@
     const footW = 0.434 * m;
     const footH = 0.07 * m;
     const armTopY = (shipShape.skidL.y - 0.28) * m;
+    const retractedFootY = (shipShape.skidL.y - 0.3) * m;
 
     const leftFootCenterX = shipShape.skidL.x * m * 1.5;
     const rightFootCenterX = shipShape.skidR.x * m * 1.5;
-    const leftFootCenterY = footL.y * m;
-    const rightFootCenterY = footR.y * m;
+    const leftFootCenterY = lerp(retractedFootY, footL.y * m, ship.gearDeploy);
+    const rightFootCenterY = lerp(retractedFootY, footR.y * m, ship.gearDeploy);
+    const drawGearVisual = !ship.tracksExtended || ship.gearDeploy > 0.001 || ship.tracksDeploy < 0.999;
 
     // 45-degree support arms (one per side), rendered behind the hull.
-    if (ship.gearDeploy > 0.001) {
+    if (drawGearVisual) {
       const legDropL = Math.max(0, leftFootCenterY - armTopY);
       const legDropR = Math.max(0, rightFootCenterY - armTopY);
       const leftTopX = leftFootCenterX + legDropL;
@@ -1594,7 +1596,7 @@
     ctx.fillText('Recycle', 0, -0.16 * m);
     ctx.fillText('Hero', 0, 0.02 * m);
 
-    if (ship.gearDeploy > 0.001) {
+    if (drawGearVisual) {
       // Feet (bright red), centered at each leg endpoint.
       ctx.fillStyle = '#ff2a2a';
       ctx.fillRect(leftFootCenterX - footW * 0.5, leftFootCenterY - footH * 0.5, footW, footH);
