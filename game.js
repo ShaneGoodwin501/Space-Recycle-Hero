@@ -806,8 +806,9 @@
     ship.gearSafetyTimer = Math.max(0, ship.gearSafetyTimer - dt);
     if (ship.tracksExtended && ship.gearExtended) ship.gearExtended = false;
     ship.tracksDeploy = lerp(ship.tracksDeploy, ship.tracksExtended ? 1 : 0, clamp(CONFIG.trackDeployRate * dt, 0, 1));
-    const gearTarget = ship.gearExtended && ship.tracksDeploy < 0.05 ? 1 : 0;
-    ship.gearDeploy = lerp(ship.gearDeploy, gearTarget, clamp(CONFIG.landingGearRate * dt, 0, 1));
+    const gearTarget = ship.gearExtended && !ship.tracksExtended && ship.tracksDeploy < 0.05 ? 1 : 0;
+    const gearRate = ship.tracksExtended ? CONFIG.trackDeployRate : CONFIG.landingGearRate;
+    ship.gearDeploy = lerp(ship.gearDeploy, gearTarget, clamp(gearRate * dt, 0, 1));
 
     const recyclePadUnderShip = terrain.pads.find((p) => p.kind === 'recycle' && Math.abs(ship.x - p.x) <= p.w * 0.45);
     if (ship.landed && recyclePadUnderShip) {
@@ -1428,7 +1429,7 @@
     const flame = ship.fuel > 0 ? ship.throttle : 0;
     if (flame > 0.02) {
       ctx.strokeStyle = '#ffbf66';
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 12;
       ctx.beginPath();
       ctx.moveTo(0, shipShape.thruster.y * m + 10);
       ctx.lineTo((Math.random() - 0.5) * 6, shipShape.thruster.y * m + 14 + flame * 38);
@@ -1472,7 +1473,7 @@
     const footR = supportLocals.right;
 
     if (ship.gearDeploy > 0.02) {
-      const footW = 0.62 * m;
+      const footW = 0.868 * m;
       const footH = 0.07 * m;
       const armTopY = (shipShape.skidL.y - 0.28) * m;
 
@@ -1516,13 +1517,13 @@
       ctx.fillStyle = '#191c22';
       ctx.fillRect(leftX, trackY, trackW, trackH);
       ctx.fillRect(rightX, trackY, trackW, trackH);
-      ctx.fillRect(joinX, trackY + trackH * 0.23, joinW, trackH * 0.54);
+      ctx.fillRect(joinX, trackY, joinW, trackH);
 
       ctx.fillStyle = '#646f7b';
       const treadInset = 0.06 * m;
       ctx.fillRect(leftX + treadInset, trackY + trackH * 0.22, trackW - treadInset * 2, trackH * 0.56);
       ctx.fillRect(rightX + treadInset, trackY + trackH * 0.22, trackW - treadInset * 2, trackH * 0.56);
-      ctx.fillRect(joinX + treadInset * 0.5, trackY + trackH * 0.36, Math.max(0, joinW - treadInset), trackH * 0.28);
+      ctx.fillRect(joinX + treadInset * 0.5, trackY + trackH * 0.22, Math.max(0, joinW - treadInset), trackH * 0.56);
 
       const wheelR = trackH * 0.25;
       ctx.fillStyle = '#ffffff';
