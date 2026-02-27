@@ -1825,57 +1825,74 @@
 
 
   function drawLeftInfoPanel(title, lines) {
-    const panelW = Math.min(760, Math.max(360, Math.floor(W * 0.7)));
-    const panelH = Math.min(H - 40, Math.max(280, Math.floor(H * 0.74)));
+    const panelW = Math.min(860, Math.max(420, Math.floor(W * 0.8)));
+    const panelH = Math.min(H - 36, Math.max(320, Math.floor(H * 0.8)));
     const panelX = Math.floor((W - panelW) * 0.5);
     const panelY = Math.floor((H - panelH) * 0.5);
 
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
     ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = 'rgba(8,12,20,0.92)';
+    ctx.fillStyle = 'rgba(8,12,20,0.94)';
     ctx.fillRect(panelX, panelY, panelW, panelH);
     ctx.strokeStyle = '#2b2b2b';
     ctx.lineWidth = 2;
     ctx.strokeRect(panelX, panelY, panelW, panelH);
 
-    const padX = panelX + 22;
-    const padY = panelY + 20;
-    const maxW = panelW - 44;
+    const padX = panelX + 30;
+    const padY = panelY + 24;
+    const maxW = panelW - 60;
     const nonEmpty = lines.filter(Boolean);
 
-    let bodySize = 28;
-    for (; bodySize >= 12; bodySize -= 1) {
-      const titleSize = Math.round(bodySize * 1.45);
-      const lineGap = Math.max(4, Math.round(bodySize * 0.45));
-      const rowH = Math.round(bodySize * 1.28);
-      const titleH = Math.round(titleSize * 1.05);
-      const totalRowsH = titleH + lineGap + lines.length * rowH;
+    let bodySize = 26;
+    for (; bodySize >= 11; bodySize -= 1) {
+      const titleSize = Math.round(bodySize * 1.5);
+      const lineGap = Math.max(8, Math.round(bodySize * 0.52));
+      const rowH = Math.round(bodySize * 1.45);
+      const titleH = Math.round(titleSize * 1.12);
+      const totalRowsH = titleH + lineGap * 2 + lines.length * rowH;
       const maxLine = nonEmpty.reduce((m, line) => {
         ctx.font = `bold ${bodySize}px Segoe UI`;
         return Math.max(m, ctx.measureText(line).width);
       }, 0);
       ctx.font = `bold ${titleSize}px Segoe UI`;
       const titleW = ctx.measureText(title).width;
-      if (totalRowsH <= panelH - 24 && Math.max(maxLine, titleW) <= maxW) break;
+      if (totalRowsH <= panelH - 34 && Math.max(maxLine, titleW) <= maxW) break;
     }
 
-    const titleSize = Math.round(bodySize * 1.45);
-    const lineGap = Math.max(4, Math.round(bodySize * 0.45));
-    const rowH = Math.round(bodySize * 1.28);
+    const titleSize = Math.round(bodySize * 1.5);
+    const lineGap = Math.max(8, Math.round(bodySize * 0.52));
+    const rowH = Math.round(bodySize * 1.45);
 
-    let y = padY + titleSize;
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    const centerX = panelX + panelW * 0.5;
+    let y = padY + Math.round(titleSize * 0.6);
+
     ctx.fillStyle = '#ffffff';
     ctx.font = `bold ${titleSize}px Segoe UI`;
-    ctx.fillText(title, padX, y);
-    y += lineGap + Math.round(bodySize * 0.25);
+    ctx.fillText(title, centerX, y);
 
+    y += lineGap;
+    ctx.strokeStyle = '#34506e';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(panelX + 34, y + 1);
+    ctx.lineTo(panelX + panelW - 34, y + 1);
+    ctx.stroke();
+
+    y += lineGap;
     ctx.font = `bold ${bodySize}px Segoe UI`;
     for (const line of lines) {
       y += rowH;
       if (!line) continue;
-      ctx.fillText(line, padX, y);
+      ctx.fillText(line, centerX, y);
     }
+
+    ctx.restore();
   }
+
 
 
   function drawHUD() {
@@ -1936,20 +1953,19 @@
 
 
     if (game.showHelp) {
-      drawLeftInfoPanel('HELP', [
-        'A / D  - ROTATE SHIP',
-        'W / S  - THROTTLE UP / DOWN',
-        'SPACE  - TOGGLE TRAY OPEN/CLOSED',
-        'O / I  - ARM SEGMENT 1 UP / DOWN',
-        'M / N  - ARM SEGMENT 2 UP / DOWN',
-        'K / L  - ARM BASE CCW / CW',
-        ', / .  - CLAW CLOSE / OPEN',
-        'Q      - TRACK MODE (LANDED)',
-        'E      - TOGGLE LANDING GEAR',
-        'SAFE LANDING: SKIDS ONLY, LOW SPEED',
-        'LAND ON REFUEL PAD TO REFILL FUEL',
-        'LAND ON RECYCLE PAD TO DELIVER CARGO',
-        'H  - CLOSE HELP AND RESUME',
+      drawLeftInfoPanel('MISSION CONTROLS', [
+        'A / D — Rotate the ship left or right while flying.',
+        'W / S — Increase or decrease engine throttle.',
+        'SPACE — Start mission, then open or close the cargo tray.',
+        'K / L — Rotate the arm base counterclockwise / clockwise.',
+        'I / O — Move arm segment 1 up / down.',
+        'N / M — Move arm segment 2 up / down.',
+        ', / . — Close or open the claw to grab cargo.',
+        'E — Extend or retract landing gear (2-second movement).',
+        'Q — Toggle track mode when landed and stable.',
+        'H — Show/hide this help panel. ESC — Pause/unpause.',
+        'Land gently on skids, refuel pads refill fuel,',
+        'and recycle pads score delivered cargo.',
       ]);
     }
 
