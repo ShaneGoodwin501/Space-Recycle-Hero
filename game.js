@@ -1461,15 +1461,22 @@
 
 
   function drawLeftInfoPanel(title, lines) {
-    const panelW = Math.max(360, Math.floor(W * 0.34));
-    ctx.fillStyle = 'rgba(0,0,0,0.86)';
-    ctx.fillRect(0, 0, panelW, H);
-    ctx.strokeStyle = '#2b2b2b';
-    ctx.strokeRect(0, 0, panelW, H);
+    const panelW = Math.min(760, Math.max(360, Math.floor(W * 0.7)));
+    const panelH = Math.min(H - 40, Math.max(280, Math.floor(H * 0.74)));
+    const panelX = Math.floor((W - panelW) * 0.5);
+    const panelY = Math.floor((H - panelH) * 0.5);
 
-    const padX = 22;
-    const padY = 20;
-    const maxW = panelW - padX * 2;
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = 'rgba(8,12,20,0.92)';
+    ctx.fillRect(panelX, panelY, panelW, panelH);
+    ctx.strokeStyle = '#2b2b2b';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(panelX, panelY, panelW, panelH);
+
+    const padX = panelX + 22;
+    const padY = panelY + 20;
+    const maxW = panelW - 44;
     const nonEmpty = lines.filter(Boolean);
 
     let bodySize = 28;
@@ -1485,7 +1492,7 @@
       }, 0);
       ctx.font = `bold ${titleSize}px Segoe UI`;
       const titleW = ctx.measureText(title).width;
-      if (totalRowsH <= H - padY * 2 && Math.max(maxLine, titleW) <= maxW) break;
+      if (totalRowsH <= panelH - 24 && Math.max(maxLine, titleW) <= maxW) break;
     }
 
     const titleSize = Math.round(bodySize * 1.45);
@@ -1505,6 +1512,7 @@
       ctx.fillText(line, padX, y);
     }
   }
+
 
   function drawHUD() {
     if (game.paused) {
