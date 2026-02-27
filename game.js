@@ -110,7 +110,8 @@
     if (e.code === 'KeyE' && game.state === 'PLAYING') {
       const tracksMode = ship.tracksExtended || ship.tracksDeploy > 0.05;
       if (!tracksMode) {
-        ship.gearExtended = !ship.gearExtended;
+        if (!ship.landed) ship.gearExtended = !ship.gearExtended;
+        else ship.gearExtended = true;
       }
     }
     if (e.code === 'KeyQ' && game.state === 'PLAYING') {
@@ -123,7 +124,7 @@
       } else if (canToggleOff) {
         ship.tracksExtended = false;
         ship.gearExtended = true;
-        ship.gearSafetyTimer = 1.2;
+        ship.gearSafetyTimer = CONFIG.landingGearTransitionSec + 0.35;
       }
     }
     if (e.code === 'Escape' && game.state !== 'CRASHED' && game.state !== 'READY') {
@@ -948,7 +949,7 @@
     }
 
     const supportSwapActive = (ship.tracksExtended && (ship.gearDeploy > 0.02 || ship.tracksDeploy < 0.98))
-      || (!ship.tracksExtended && ship.tracksDeploy > 0.02);
+      || (!ship.tracksExtended && (ship.tracksDeploy > 0.02 || (ship.gearExtended && ship.gearDeploy < 0.98)));
     if (hasSkid && !tracksDriving && !supportSwapActive && ship.gearSafetyTimer <= 0 && ship.gearDeploy < 0.85) {
       return crashShip('no-landing-gear');
     }
