@@ -110,7 +110,7 @@
     if (e.code === 'KeyE' && game.state === 'PLAYING') {
       const tracksMode = ship.tracksExtended || ship.tracksDeploy > 0.05;
       if (!tracksMode) {
-        if (!(ship.landed && ship.gearExtended)) ship.gearExtended = !ship.gearExtended;
+        ship.gearExtended = !ship.gearExtended;
       }
     }
     if (e.code === 'KeyQ' && game.state === 'PLAYING') {
