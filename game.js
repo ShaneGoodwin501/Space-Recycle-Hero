@@ -1465,32 +1465,33 @@
     const footR = supportLocals.right;
 
     if (ship.gearDeploy > 0.02) {
-      // Feet
-      ctx.strokeStyle = '#73ffcf';
+      const footW = 0.44 * m;
+      const footH = 0.065 * m;
+      const leftFootX = shipShape.skidL.x * m - footW * 0.5;
+      const rightFootX = shipShape.skidR.x * m - footW * 0.5;
+      const leftFootY = footL.y * m - footH * 0.5;
+      const rightFootY = footR.y * m - footH * 0.5;
+
+      // Feet (bright red)
+      ctx.fillStyle = '#ff2a2a';
+      ctx.fillRect(leftFootX, leftFootY, footW, footH);
+      ctx.fillRect(rightFootX, rightFootY, footW, footH);
+
+      // One solid grey leg per side, each connected only to its own foot.
+      const armTopY = (shipShape.skidL.y - 0.28) * m;
+      const armRun = Math.max(0, (footL.y - (shipShape.skidL.y - 0.28)) * m);
+      const leftTopX = (shipShape.skidL.x - 0.02) * m;
+      const rightTopX = (shipShape.skidR.x + 0.02) * m;
+      const leftFootCenterX = shipShape.skidL.x * m;
+      const rightFootCenterX = shipShape.skidR.x * m;
+
+      ctx.strokeStyle = '#8a96a4';
       ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.moveTo((shipShape.skidL.x - 0.22) * m, footL.y * m);
-      ctx.lineTo((shipShape.skidL.x + 0.22) * m, footL.y * m);
-      ctx.moveTo((shipShape.skidR.x - 0.22) * m, footR.y * m);
-      ctx.lineTo((shipShape.skidR.x + 0.22) * m, footR.y * m);
-      ctx.stroke();
-
-      // 45-degree support arms
-      const armTopY = (shipShape.skidL.y - 0.28) * m;
-      const armDrop = footL.y * m - armTopY;
-      const armRun = armDrop;
-      ctx.strokeStyle = '#9fb7cf';
-      ctx.lineWidth = 2.2;
-      ctx.beginPath();
-      ctx.moveTo((shipShape.skidL.x - 0.02) * m, armTopY);
-      ctx.lineTo((shipShape.skidL.x - 0.02) * m - armRun, footL.y * m);
-      ctx.moveTo((shipShape.skidL.x + 0.02) * m, armTopY);
-      ctx.lineTo((shipShape.skidL.x + 0.02) * m + armRun, footL.y * m);
-
-      ctx.moveTo((shipShape.skidR.x - 0.02) * m, armTopY);
-      ctx.lineTo((shipShape.skidR.x - 0.02) * m - armRun, footR.y * m);
-      ctx.moveTo((shipShape.skidR.x + 0.02) * m, armTopY);
-      ctx.lineTo((shipShape.skidR.x + 0.02) * m + armRun, footR.y * m);
+      ctx.moveTo(leftTopX, armTopY);
+      ctx.lineTo(leftFootCenterX - armRun, footL.y * m);
+      ctx.moveTo(rightTopX, armTopY);
+      ctx.lineTo(rightFootCenterX + armRun, footR.y * m);
       ctx.stroke();
     }
 
