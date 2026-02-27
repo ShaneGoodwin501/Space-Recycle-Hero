@@ -1487,6 +1487,63 @@
     ctx.fillRect(tr.x * m, tr.y * m, 5, tr.h * m);
     ctx.fillRect((tr.x + tr.w) * m - 5, tr.y * m, 5, tr.h * m);
 
+    // Landing gear feet + support arms
+    const supportLocals = getSupportLocals();
+    const footL = supportLocals.left;
+    const footR = supportLocals.right;
+
+    const footW = 0.434 * m;
+    const footH = 0.07 * m;
+    const armTopY = (shipShape.skidL.y - 0.28) * m;
+
+    const leftFootCenterX = shipShape.skidL.x * m * 1.5;
+    const rightFootCenterX = shipShape.skidR.x * m * 1.5;
+    const leftFootCenterY = footL.y * m;
+    const rightFootCenterY = footR.y * m;
+
+    // 45-degree support arms (one per side), rendered behind the hull.
+    if (ship.gearDeploy > 0.02) {
+      const legDropL = Math.max(0, leftFootCenterY - armTopY);
+      const legDropR = Math.max(0, rightFootCenterY - armTopY);
+      const leftTopX = leftFootCenterX + legDropL;
+      const rightTopX = rightFootCenterX - legDropR;
+
+      ctx.strokeStyle = '#8a96a4';
+      ctx.lineWidth = 9;
+      ctx.beginPath();
+      ctx.moveTo(leftTopX, armTopY);
+      ctx.lineTo(leftFootCenterX, leftFootCenterY);
+      ctx.moveTo(rightTopX, armTopY);
+      ctx.lineTo(rightFootCenterX, rightFootCenterY);
+      ctx.stroke();
+    }
+
+    const trackY = (shipShape.skidL.y + 0.02) * m;
+    const trackH = (0.2 + 0.13 * ship.tracksDeploy) * m;
+    const trackW = 0.6 * m;
+    const centerGap = 0.34 * m;
+    const leftTrackX = -centerGap - trackW;
+    const rightTrackX = centerGap;
+    const joinX = leftTrackX + trackW;
+    const joinW = rightTrackX - joinX;
+
+    // Track support legs, rendered behind the hull so they look under-mounted.
+    if (ship.tracksDeploy > 0.02) {
+      const trackTopY = trackY;
+      const leftTrackCenterX = leftTrackX + trackW * 0.5;
+      const rightTrackCenterX = rightTrackX + trackW * 0.5;
+      const trackLegTopY = (shipShape.skidL.y - 0.25) * m;
+
+      ctx.strokeStyle = '#8a96a4';
+      ctx.lineWidth = 9;
+      ctx.beginPath();
+      ctx.moveTo(leftTrackCenterX, trackLegTopY);
+      ctx.lineTo(leftTrackCenterX, trackTopY);
+      ctx.moveTo(rightTrackCenterX, trackLegTopY);
+      ctx.lineTo(rightTrackCenterX, trackTopY);
+      ctx.stroke();
+    }
+
     // Hull
     ctx.fillStyle = '#d5dbe6';
     ctx.beginPath();
@@ -1508,68 +1565,29 @@
     ctx.fillText('Recycle', 0, -0.16 * m);
     ctx.fillText('Hero', 0, 0.02 * m);
 
-    // Landing gear feet + support arms
-    const supportLocals = getSupportLocals();
-    const footL = supportLocals.left;
-    const footR = supportLocals.right;
-
     if (ship.gearDeploy > 0.02) {
-      const footW = 0.434 * m;
-      const footH = 0.07 * m;
-      const armTopY = (shipShape.skidL.y - 0.28) * m;
-
-      const leftFootCenterX = shipShape.skidL.x * m * 1.5;
-      const rightFootCenterX = shipShape.skidR.x * m * 1.5;
-      const leftFootCenterY = footL.y * m;
-      const rightFootCenterY = footR.y * m;
-
-      // 45-degree support arms (one per side).
-      const legDropL = Math.max(0, leftFootCenterY - armTopY);
-      const legDropR = Math.max(0, rightFootCenterY - armTopY);
-      const leftTopX = leftFootCenterX + legDropL;
-      const rightTopX = rightFootCenterX - legDropR;
-
-      ctx.strokeStyle = '#8a96a4';
-      ctx.lineWidth = 9;
-      ctx.beginPath();
-      ctx.moveTo(leftTopX, armTopY);
-      ctx.lineTo(leftFootCenterX, leftFootCenterY);
-      ctx.moveTo(rightTopX, armTopY);
-      ctx.lineTo(rightFootCenterX, rightFootCenterY);
-      ctx.stroke();
-
-      // Feet (bright red), centered at the leg endpoints.
+      // Feet (bright red), centered at each leg endpoint.
       ctx.fillStyle = '#ff2a2a';
       ctx.fillRect(leftFootCenterX - footW * 0.5, leftFootCenterY - footH * 0.5, footW, footH);
       ctx.fillRect(rightFootCenterX - footW * 0.5, rightFootCenterY - footH * 0.5, footW, footH);
     }
 
-
     if (ship.tracksDeploy > 0.02) {
-      const trackY = (shipShape.skidL.y + 0.02) * m;
-      const trackH = (0.2 + 0.13 * ship.tracksDeploy) * m;
-      const trackW = 0.6 * m;
-      const centerGap = 0.34 * m;
-      const leftX = -centerGap - trackW;
-      const rightX = centerGap;
-      const joinX = leftX + trackW;
-      const joinW = rightX - joinX;
-
       ctx.fillStyle = '#191c22';
-      ctx.fillRect(leftX, trackY, trackW, trackH);
-      ctx.fillRect(rightX, trackY, trackW, trackH);
+      ctx.fillRect(leftTrackX, trackY, trackW, trackH);
+      ctx.fillRect(rightTrackX, trackY, trackW, trackH);
       ctx.fillRect(joinX, trackY, joinW, trackH);
 
       ctx.fillStyle = '#646f7b';
       const treadInset = 0.06 * m;
-      ctx.fillRect(leftX + treadInset, trackY + trackH * 0.22, trackW - treadInset * 2, trackH * 0.56);
-      ctx.fillRect(rightX + treadInset, trackY + trackH * 0.22, trackW - treadInset * 2, trackH * 0.56);
+      ctx.fillRect(leftTrackX + treadInset, trackY + trackH * 0.22, trackW - treadInset * 2, trackH * 0.56);
+      ctx.fillRect(rightTrackX + treadInset, trackY + trackH * 0.22, trackW - treadInset * 2, trackH * 0.56);
       ctx.fillRect(joinX + treadInset * 0.5, trackY + trackH * 0.22, Math.max(0, joinW - treadInset), trackH * 0.56);
 
       const wheelR = trackH * 0.25;
       ctx.fillStyle = '#ffffff';
-      const leftCenterX = leftX + trackW * 0.5;
-      const rightCenterX = rightX + trackW * 0.5;
+      const leftCenterX = leftTrackX + trackW * 0.5;
+      const rightCenterX = rightTrackX + trackW * 0.5;
       const topY = trackY + wheelR + 2;
       const bottomY = trackY + trackH - wheelR - 2;
       for (const cx of [leftCenterX, rightCenterX]) {
