@@ -301,9 +301,11 @@
   function getSupportLocals() {
     const gearExtra = shipShape.skidL.y * 0.3 * ship.gearDeploy;
     const trackExtra = 0.16 * ship.tracksDeploy;
+    const transitionBlend = 1 - Math.abs(ship.tracksDeploy * 2 - 1);
+    const transitionDrop = 0.06 * transitionBlend;
     return {
-      left: { x: shipShape.skidL.x, y: shipShape.skidL.y + gearExtra + trackExtra },
-      right: { x: shipShape.skidR.x, y: shipShape.skidR.y + gearExtra + trackExtra },
+      left: { x: shipShape.skidL.x, y: shipShape.skidL.y + gearExtra + trackExtra + transitionDrop },
+      right: { x: shipShape.skidR.x, y: shipShape.skidR.y + gearExtra + trackExtra + transitionDrop },
     };
   }
 
@@ -805,12 +807,17 @@
     ship.invincibleTimer = Math.max(0, ship.invincibleTimer - dt);
     ship.gearSafetyTimer = Math.max(0, ship.gearSafetyTimer - dt);
     if (ship.tracksExtended && ship.gearExtended) ship.gearExtended = false;
-    const enteringVehicleMode = ship.tracksExtended;
-    const trackDeployRate = CONFIG.trackDeployRate * (enteringVehicleMode ? 0.5 : 1);
-    ship.tracksDeploy = lerp(ship.tracksDeploy, ship.tracksExtended ? 1 : 0, clamp(trackDeployRate * dt, 0, 1));
-    const gearTarget = ship.gearExtended && !ship.tracksExtended && ship.tracksDeploy < 0.05 ? 1 : 0;
-    const gearRateBase = ship.tracksExtended ? CONFIG.trackDeployRate : CONFIG.landingGearRate;
-    const gearRate = gearTarget < ship.gearDeploy && enteringVehicleMode ? gearRateBase * 0.5 : gearRateBase;
+    const tracksTarget = ship.tracksExtended ? 1 : 0;
+    const gearTargetFromMode = ship.tracksExtended ? 0 : 1;
+    const modeTransitionRequested = ship.gearExtended === !ship.tracksExtended;
+    const modeTransitionActive = modeTransitionRequested && (Math.abs(ship.tracksDeploy - tracksTarget) > 0.01 || Math.abs(ship.gearDeploy - gearTargetFromMode) > 0.01);
+
+    const trackDeployRate = CONFIG.trackDeployRate * (modeTransitionActive ? 0.5 : 1);
+    ship.tracksDeploy = lerp(ship.tracksDeploy, tracksTarget, clamp(trackDeployRate * dt, 0, 1));
+
+    const gearTarget = modeTransitionActive ? gearTargetFromMode : (ship.gearExtended ? 1 : 0);
+    const gearRateBase = modeTransitionActive ? CONFIG.trackDeployRate : CONFIG.landingGearRate;
+    const gearRate = gearRateBase * (modeTransitionActive ? 0.5 : 1);
     ship.gearDeploy = lerp(ship.gearDeploy, gearTarget, clamp(gearRate * dt, 0, 1));
 
     const recyclePadUnderShip = terrain.pads.find((p) => p.kind === 'recycle' && Math.abs(ship.x - p.x) <= p.w * 0.45);
