@@ -810,7 +810,7 @@
     const swapToTracks = ship.tracksExtended;
     const modeTransitionActive = swapToTracks
       ? (ship.gearDeploy > 0.001 || ship.tracksDeploy < 0.999)
-      : (ship.tracksDeploy > 0.001 || ship.gearDeploy < 0.999);
+      : (ship.tracksDeploy > 0.001);
 
     const swapRate = CONFIG.trackDeployRate * (modeTransitionActive ? 0.5 : 1);
     if (swapToTracks) {
@@ -820,10 +820,10 @@
       if (gearStepDone) ship.tracksDeploy = lerp(ship.tracksDeploy, 1, clamp(swapRate * dt, 0, 1));
       else ship.tracksDeploy = lerp(ship.tracksDeploy, 0, clamp(swapRate * dt, 0, 1));
     } else {
-      // Exiting vehicle mode sequence: tracks retract first, then gear extends.
+      // Exiting vehicle mode sequence: tracks retract first, then gear follows manual target.
       const trackStepDone = ship.tracksDeploy <= 0.02;
       ship.tracksDeploy = lerp(ship.tracksDeploy, 0, clamp(swapRate * dt, 0, 1));
-      if (trackStepDone) ship.gearDeploy = lerp(ship.gearDeploy, 1, clamp(swapRate * dt, 0, 1));
+      if (trackStepDone) ship.gearDeploy = lerp(ship.gearDeploy, ship.gearExtended ? 1 : 0, clamp(swapRate * dt, 0, 1));
       else ship.gearDeploy = lerp(ship.gearDeploy, 0, clamp(swapRate * dt, 0, 1));
     }
 
