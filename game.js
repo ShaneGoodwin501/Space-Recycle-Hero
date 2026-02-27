@@ -1429,7 +1429,7 @@
     const flame = ship.fuel > 0 ? ship.throttle : 0;
     if (flame > 0.02) {
       ctx.strokeStyle = '#ffbf66';
-      ctx.lineWidth = 12;
+      ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.moveTo(0, shipShape.thruster.y * m + 10);
       ctx.lineTo((Math.random() - 0.5) * 6, shipShape.thruster.y * m + 14 + flame * 38);
@@ -1473,12 +1473,12 @@
     const footR = supportLocals.right;
 
     if (ship.gearDeploy > 0.02) {
-      const footW = 0.868 * m;
+      const footW = 0.434 * m;
       const footH = 0.07 * m;
       const armTopY = (shipShape.skidL.y - 0.28) * m;
 
-      const leftFootCenterX = shipShape.skidL.x * m;
-      const rightFootCenterX = shipShape.skidR.x * m;
+      const leftFootCenterX = shipShape.skidL.x * m * 1.5;
+      const rightFootCenterX = shipShape.skidR.x * m * 1.5;
       const leftFootCenterY = footL.y * m;
       const rightFootCenterY = footR.y * m;
 
@@ -1489,7 +1489,7 @@
       const rightTopX = rightFootCenterX - legDropR;
 
       ctx.strokeStyle = '#8a96a4';
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 18;
       ctx.beginPath();
       ctx.moveTo(leftTopX, armTopY);
       ctx.lineTo(leftFootCenterX, leftFootCenterY);
