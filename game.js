@@ -87,15 +87,18 @@
     keys.add(e.code);
     unlockAudioFromUserGesture();
 
-    if (handleNameEntryKey(e)) return;
 
     if (e.code === 'Space') {
       if (game.state === 'READY') startMission();
       else if (game.state === 'PLAYING') ship.trayExtended = !ship.trayExtended;
     }
-    if (e.code === 'KeyH' && game.state === 'PLAYING') {
-      game.showHelp = !game.showHelp;
-      game.paused = game.showHelp;
+    if (e.code === 'KeyH') {
+      if (game.state === 'PLAYING') {
+        game.showHelp = !game.showHelp;
+        game.paused = game.showHelp;
+      } else if (game.state === 'READY') {
+        game.showHelp = !game.showHelp;
+      }
     }
     if (e.code === 'Escape' && game.state !== 'CRASHED' && game.state !== 'READY') {
       game.paused = !game.paused;
@@ -363,139 +366,16 @@
 
   const game = {
     score: 0,
-    showHelp: true,
+    showHelp: false,
     paused: false,
     state: 'READY',
     camera: { x: ship.x, y: ship.y - 6 },
     explosions: [],
     crunchFx: [],
     audio: null,
-    leaderboard: [],
-    leaderboardError: '',
-    leaderboardLoaded: false,
-    nameEntry: { active: false, value: '', score: 0, submitting: false, message: '' },
   };
 
 
-  const MAX_LEADERBOARD_ENTRIES = 10;
-
-  function normalizePlayerName(raw) {
-    const stripped = String(raw || '')
-      .replace(/[^a-z0-9 _-]/gi, '')
-      .trim();
-    return stripped.slice(0, 10);
-  }
-
-  async function fetchLeaderboard() {
-    try {
-      const resp = await fetch('leaderboard.php', { cache: 'no-store' });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = await resp.json();
-      if (!data || !Array.isArray(data.entries)) throw new Error('Invalid payload');
-      game.leaderboard = data.entries.slice(0, MAX_LEADERBOARD_ENTRIES);
-      game.leaderboardError = '';
-      game.leaderboardLoaded = true;
-    } catch (err) {
-      game.leaderboardError = 'Leaderboard unavailable';
-      game.leaderboardLoaded = true;
-    }
-  }
-
-  function scoreQualifiesForLeaderboard(score) {
-    if (score <= 0) return false;
-    if (game.leaderboard.length < MAX_LEADERBOARD_ENTRIES) return true;
-    const lowest = game.leaderboard[game.leaderboard.length - 1];
-    return score > (lowest?.score || 0);
-  }
-
-  async function submitLeaderboardScore(name, score) {
-    const player = normalizePlayerName(name);
-    if (!player || player.length > 10) return false;
-    try {
-      const resp = await fetch('leaderboard.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: player, score: Math.floor(score) }),
-      });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = await resp.json();
-      if (!data || !Array.isArray(data.entries)) throw new Error('Invalid payload');
-      game.leaderboard = data.entries.slice(0, MAX_LEADERBOARD_ENTRIES);
-      game.leaderboardError = '';
-      game.leaderboardLoaded = true;
-      return true;
-    } catch (err) {
-      game.leaderboardError = 'Unable to save score';
-      return false;
-    }
-  }
-
-
-  async function submitNameEntry() {
-    const entry = game.nameEntry;
-    if (!entry.active || entry.submitting) return;
-    const name = normalizePlayerName(entry.value);
-    if (!name) {
-      entry.message = 'Enter 1-10 characters';
-      return;
-    }
-
-    entry.submitting = true;
-    entry.message = 'Saving...';
-    const ok = await submitLeaderboardScore(name, entry.score);
-    entry.submitting = false;
-    entry.message = ok ? 'Saved!' : 'Save failed';
-
-    if (ok) {
-      entry.active = false;
-      entry.value = '';
-    }
-  }
-
-  function beginLeaderboardNameEntry() {
-    if (game.nameEntry.active) return;
-    if (!scoreQualifiesForLeaderboard(game.score)) return;
-    game.nameEntry.active = true;
-    game.nameEntry.value = '';
-    game.nameEntry.score = Math.floor(game.score);
-    game.nameEntry.submitting = false;
-    game.nameEntry.message = 'New high score! Enter your name';
-  }
-
-  function handleNameEntryKey(e) {
-    const entry = game.nameEntry;
-    if (!entry.active) return false;
-
-    if (e.code === 'Enter') {
-      e.preventDefault();
-      submitNameEntry();
-      return true;
-    }
-
-    if (e.code === 'Escape') {
-      e.preventDefault();
-      if (!entry.submitting) {
-        entry.active = false;
-        entry.value = '';
-      }
-      return true;
-    }
-
-    if (e.code === 'Backspace') {
-      e.preventDefault();
-      if (!entry.submitting) entry.value = entry.value.slice(0, -1);
-      return true;
-    }
-
-    if (!entry.submitting && e.key && e.key.length === 1) {
-      const next = normalizePlayerName(entry.value + e.key);
-      if (next.length <= 10) entry.value = next;
-      e.preventDefault();
-      return true;
-    }
-
-    return true;
-  }
 
 
   function randomizeWorld() {
@@ -701,7 +581,6 @@
     ship.cargoMass = 0;
     // eslint-disable-next-line no-console
     console.info('Crash:', reason);
-    beginLeaderboardNameEntry();
   }
 
   function respawnShip() {
@@ -730,7 +609,7 @@
     game.camera.x = ship.x;
     game.camera.y = ship.y - 6;
     game.state = 'READY';
-    fetchLeaderboard();
+    game.showHelp = false;
   }
 
   function updateInput(dt) {
@@ -1650,28 +1529,7 @@
     if (game.state === 'READY') {
       ctx.fillStyle = 'rgba(0,0,0,0.42)';
       ctx.fillRect(0, 0, W, H);
-      const panelW = Math.max(360, Math.floor(W * 0.34));
-      drawLeftInfoPanel('CONTROLS', [
-        'A  - ROTATE LEFT',
-        'D  - ROTATE RIGHT',
-        'W  - THROTTLE UP',
-        'S  - THROTTLE DOWN',
-        'SPACE - START / TOGGLE TRAY',
-        'O  - ARM SEG1 UP',
-        'I  - ARM SEG1 DOWN',
-        'M  - ARM SEG2 UP',
-        'N  - ARM SEG2 DOWN',
-        'K  - BASE CCW',
-        'L  - BASE CW',
-        ',  - CLAW CLOSE',
-        '.  - CLAW OPEN',
-        'H  - HELP / PAUSE',
-        'ESC - PAUSE',
-      ]);
 
-      // Responsive right-side READY heading/subheading that always fits window size.
-      const rightX = panelW + 26;
-      const rightW = Math.max(180, W - rightX - 24);
       const gameplayH = getGameplayHeight();
       const titleY = gameplayH * 0.42;
       const subY = gameplayH * 0.52;
@@ -1679,50 +1537,33 @@
       let titleSize = Math.min(56, Math.max(22, Math.round(gameplayH * 0.09)));
       for (; titleSize >= 18; titleSize -= 1) {
         ctx.font = `bold ${titleSize}px Segoe UI`;
-        if (ctx.measureText('SPACE RECYCLE HERO').width <= rightW) break;
+        if (ctx.measureText('SPACE RECYCLE HERO').width <= W - 48) break;
       }
       let subSize = Math.min(30, Math.max(14, Math.round(gameplayH * 0.05)));
       for (; subSize >= 12; subSize -= 1) {
         ctx.font = `bold ${subSize}px Segoe UI`;
-        if (ctx.measureText('PRESS SPACE TO START').width <= rightW) break;
+        if (ctx.measureText('PRESS SPACE TO START').width <= W - 48) break;
       }
 
+      ctx.textAlign = 'center';
       ctx.fillStyle = '#ffffff';
       ctx.font = `bold ${titleSize}px Segoe UI`;
-      ctx.fillText('SPACE RECYCLE HERO', rightX, titleY);
+      ctx.fillText('SPACE RECYCLE HERO', W / 2, titleY);
       ctx.font = `bold ${subSize}px Segoe UI`;
       ctx.fillStyle = '#9ce8ff';
-      ctx.fillText('PRESS SPACE TO START', rightX, subY);
+      ctx.fillText('PRESS SPACE TO START', W / 2, subY);
 
-      const boardY = subY + Math.max(34, gameplayH * 0.08);
-      const boardLineH = Math.max(16, Math.round(gameplayH * 0.035));
-      ctx.fillStyle = '#ffe48a';
-      ctx.font = `bold ${Math.max(14, Math.round(boardLineH * 0.95))}px Segoe UI`;
-      ctx.fillText('TOP 10 LEADERBOARD', rightX, boardY);
-
-      const rows = game.leaderboard.slice(0, MAX_LEADERBOARD_ENTRIES);
-      ctx.font = `${Math.max(12, Math.round(boardLineH * 0.82))}px Consolas, monospace`;
-      ctx.fillStyle = '#e5f6ff';
-      for (let i = 0; i < MAX_LEADERBOARD_ENTRIES; i++) {
-        const entry = rows[i];
-        const y = boardY + (i + 1) * boardLineH;
-        const rank = `${i + 1}.`.padEnd(4, ' ');
-        const nm = (entry?.name || '---').padEnd(10, ' ').slice(0, 10);
-        const sc = String(entry?.score || 0).padStart(5, ' ');
-        ctx.fillText(`${rank}${nm} ${sc}`, rightX, y);
-      }
-
-      if (game.leaderboardError) {
-        ctx.fillStyle = '#ff9a9a';
-        ctx.font = `${Math.max(11, Math.round(boardLineH * 0.72))}px Segoe UI`;
-        ctx.fillText(game.leaderboardError, rightX, boardY + (MAX_LEADERBOARD_ENTRIES + 1.5) * boardLineH);
-      }
+      ctx.fillStyle = '#ff4f4f';
+      ctx.font = `bold ${Math.max(14, Math.round(subSize * 0.78))}px Segoe UI`;
+      ctx.fillText('PRESS H FOR CONTROLS', W / 2, subY + Math.max(30, subSize * 1.6));
+      ctx.textAlign = 'left';
     }
+
 
     drawBottomConsole();
 
 
-    if (game.showHelp && game.state !== 'READY') {
+    if (game.showHelp) {
       drawLeftInfoPanel('HELP', [
         'A / D  - ROTATE SHIP',
         'W / S  - THROTTLE UP / DOWN',
@@ -1738,48 +1579,6 @@
       ]);
     }
 
-    if (game.nameEntry.active) {
-      const boxW = Math.min(560, Math.floor(W * 0.75));
-      const boxH = 190;
-      const x = Math.floor((W - boxW) * 0.5);
-      const y = Math.floor((getGameplayHeight() - boxH) * 0.45);
-
-      ctx.fillStyle = 'rgba(0,0,0,0.72)';
-      ctx.fillRect(0, 0, W, getGameplayHeight());
-      ctx.fillStyle = '#151a29';
-      ctx.fillRect(x, y, boxW, boxH);
-      ctx.strokeStyle = '#9ce8ff';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(x, y, boxW, boxH);
-
-      const entry = game.nameEntry;
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 26px Segoe UI';
-      ctx.fillText('NEW HIGH SCORE!', x + 20, y + 38);
-      ctx.font = '16px Segoe UI';
-      ctx.fillStyle = '#dbe9ff';
-      ctx.fillText(`Score: ${entry.score}`, x + 20, y + 62);
-      ctx.fillText('Enter name (max 10):', x + 20, y + 88);
-
-      const fieldW = boxW - 40;
-      const fieldY = y + 100;
-      ctx.fillStyle = '#0e1422';
-      ctx.fillRect(x + 20, fieldY, fieldW, 38);
-      ctx.strokeStyle = '#6ccfff';
-      ctx.strokeRect(x + 20, fieldY, fieldW, 38);
-
-      const displayName = (entry.value || '').slice(0, 10);
-      const cursor = Math.floor(performance.now() / 500) % 2 === 0 ? '|' : ' ';
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 22px Consolas, monospace';
-      ctx.fillText(displayName + (entry.submitting ? '' : cursor), x + 28, fieldY + 26);
-
-      ctx.font = '14px Segoe UI';
-      ctx.fillStyle = entry.message.includes('failed') ? '#ff9a9a' : '#9ce8ff';
-      ctx.fillText(entry.message || 'Press Enter to submit', x + 20, y + 158);
-      ctx.fillStyle = '#9fb5cf';
-      ctx.fillText('Enter = Submit, Backspace = Delete, Esc = Cancel', x + 20, y + 176);
-    }
   }
 
   let last = performance.now();
@@ -1816,6 +1615,5 @@
     requestAnimationFrame(loop);
   }
 
-  fetchLeaderboard();
   requestAnimationFrame(loop);
 })();
