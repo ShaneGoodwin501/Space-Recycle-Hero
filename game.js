@@ -1604,6 +1604,8 @@
         updateShip(dt);
         updateCargo(dt);
         updateCamera(dt);
+      } else if (game.state === 'READY') {
+        updateCamera(dt);
       }
       updateExplosions(dt);
       updateAudio();
