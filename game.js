@@ -1511,13 +1511,18 @@
 
     // Tray retract/extend bay
     const tr = getTrayRect();
+    const trayVisualH = tr.h * 0.7; // 30% thinner drawer profile.
+    const trayVisualY = tr.y + (tr.h - trayVisualH) * 0.5;
+    const trayVisualW = shipShape.trayRect.w; // Keep drawer width fixed regardless of throttle/state.
+    const trayEdgeW = Math.max(4, Math.min(7, 0.12 * m));
+
     ctx.fillStyle = '#d5dbe6';
-    ctx.fillRect(tr.x * m, tr.y * m, tr.w * m, tr.h * m);
+    ctx.fillRect(tr.x * m, trayVisualY * m, trayVisualW * m, trayVisualH * m);
     ctx.strokeStyle = '#18202c';
-    ctx.strokeRect(tr.x * m, tr.y * m, tr.w * m, tr.h * m);
+    ctx.strokeRect(tr.x * m, trayVisualY * m, trayVisualW * m, trayVisualH * m);
     ctx.fillStyle = '#d5dbe6';
-    ctx.fillRect(tr.x * m, tr.y * m, 5, tr.h * m);
-    ctx.fillRect((tr.x + tr.w) * m - 5, tr.y * m, 5, tr.h * m);
+    ctx.fillRect(tr.x * m, trayVisualY * m, trayEdgeW, trayVisualH * m);
+    ctx.fillRect((tr.x + trayVisualW) * m - trayEdgeW, trayVisualY * m, trayEdgeW, trayVisualH * m);
 
     // Landing gear feet + support arms
     const supportLocals = getSupportLocals();
