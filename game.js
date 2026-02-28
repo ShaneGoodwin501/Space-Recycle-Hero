@@ -1654,7 +1654,7 @@
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.font = `700 ${Math.max(10, Math.floor(0.21 * m))}px "Segoe UI", Arial, sans-serif`;
-      const trayLabelX = (tr.x + trayVisualW * 0.5) * m - ctx.measureText(' ').width;
+      const trayLabelX = (tr.x + trayVisualW * 0.5) * m - ctx.measureText('  ').width;
       ctx.fillText('CARGO', trayLabelX, (trayVisualY + trayVisualH * 0.5) * m);
     }
 
