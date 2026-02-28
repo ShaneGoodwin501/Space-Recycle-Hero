@@ -1984,6 +1984,16 @@
       return;
     }
     const base = { x: shipShape.craneBase.x, y: shipShape.craneBase.y + ship.armStowDrop * ARM_STOW_DROP_MAX };
+
+    // While retracting into the ship, clip arm rendering above the bay lip so it reads as stowing inside.
+    const loweringIntoShip = ship.armFoldBlend >= 0.72;
+    if (loweringIntoShip) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(-3.2 * m, -3.6 * m, 6.4 * m, (shipShape.craneBase.y - 0.02) * m + 3.6 * m);
+      ctx.clip();
+    }
+
     {
       const bAng = -Math.PI / 2 + ship.baseAngle;
       const seg1Len = 2.14;
@@ -2059,6 +2069,8 @@
       drawJoint(p1);
       drawJoint(p2);
     }
+
+    if (loweringIntoShip) ctx.restore();
 
     ctx.restore();
   }
