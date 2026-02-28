@@ -1486,17 +1486,35 @@
     ctx.beginPath();
     ctx.arc(earthX, earthY, earthRadius, 0, Math.PI * 2);
     ctx.clip();
-    ctx.globalAlpha = 0.55;
+    ctx.globalAlpha = 0.62;
     ctx.fillStyle = '#5ec26a';
-    ctx.beginPath();
-    ctx.ellipse(earthX - earthRadius * 0.22, earthY + earthRadius * 0.03, earthRadius * 0.3, earthRadius * 0.18, 0.2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.ellipse(earthX + earthRadius * 0.16, earthY - earthRadius * 0.16, earthRadius * 0.24, earthRadius * 0.13, -0.35, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.ellipse(earthX + earthRadius * 0.08, earthY + earthRadius * 0.28, earthRadius * 0.16, earthRadius * 0.1, 0.1, 0, Math.PI * 2);
-    ctx.fill();
+
+    const landShapes = [
+      [-0.34, -0.08, 0.33, 0.19, 0.18],
+      [-0.08, 0.07, 0.28, 0.17, -0.06],
+      [0.20, -0.19, 0.25, 0.14, -0.34],
+      [0.29, 0.03, 0.19, 0.11, 0.12],
+      [0.11, 0.28, 0.18, 0.11, 0.05],
+      [-0.24, 0.28, 0.16, 0.1, -0.3],
+      [0.02, -0.34, 0.14, 0.09, 0.22],
+      [-0.02, -0.18, 0.12, 0.08, 0.5],
+      [0.39, -0.06, 0.11, 0.07, 0.2],
+      [-0.42, 0.12, 0.12, 0.08, -0.25],
+    ];
+
+    for (const [ox, oy, rx, ry, rot] of landShapes) {
+      ctx.beginPath();
+      ctx.ellipse(
+        earthX + earthRadius * ox,
+        earthY + earthRadius * oy,
+        earthRadius * rx,
+        earthRadius * ry,
+        rot,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+    }
     ctx.restore();
 
     // Simple cloud bands / atmosphere glow.
@@ -1531,21 +1549,21 @@
     // Expanded ISS solar arrays: multiple horizontal panel sections on both sides.
     ctx.fillStyle = '#4f7cc5';
     const panelW = 10 * issScale;
-    const panelH = 11 * issScale;
+    const panelH = 33 * issScale;
     const panelGap = 1.8 * issScale;
     for (let i = 0; i < 4; i++) {
       const leftX = (-54 * issScale) + i * (panelW + panelGap);
       const rightX = (13 * issScale) + i * (panelW + panelGap);
-      ctx.fillRect(leftX, -5.5 * issScale, panelW, panelH);
-      ctx.fillRect(rightX, -5.5 * issScale, panelW, panelH);
+      ctx.fillRect(leftX, -16.5 * issScale, panelW, panelH);
+      ctx.fillRect(rightX, -16.5 * issScale, panelW, panelH);
     }
     ctx.strokeStyle = '#b9d5ff';
     ctx.lineWidth = 1.1;
     for (let i = 0; i < 4; i++) {
       const leftX = (-54 * issScale) + i * (panelW + panelGap);
       const rightX = (13 * issScale) + i * (panelW + panelGap);
-      ctx.strokeRect(leftX, -5.5 * issScale, panelW, panelH);
-      ctx.strokeRect(rightX, -5.5 * issScale, panelW, panelH);
+      ctx.strokeRect(leftX, -16.5 * issScale, panelW, panelH);
+      ctx.strokeRect(rightX, -16.5 * issScale, panelW, panelH);
     }
     ctx.restore();
 
