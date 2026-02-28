@@ -64,6 +64,7 @@
     canvas.style.width = `${W}px`;
     canvas.style.height = `${H}px`;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (stars.length) regenerateStars();
   }
 
   function getConsoleHeight() {
@@ -229,8 +230,8 @@
 
   function regenerateStars() {
     stars = Array.from({ length: CONFIG.starCount }, () => ({
-      x: Math.random() * CONFIG.worldWidth,
-      y: Math.random() * 210 - 70,
+      x: Math.random() * (W + 80) - 40,
+      y: Math.random() * (getGameplayHeight() * 0.9) + 6,
       r: Math.random() * 1.8 + 0.2,
       a: Math.random() * 0.72 + 0.18,
     }));
@@ -1344,10 +1345,12 @@
       ctx.stroke();
     }
 
+    const starWrapW = W + 80;
+    const starParallaxShift = game.camera.x * CONFIG.METER_TO_PX * 0.12;
     for (const s of stars) {
-      const parallaxX = (s.x - game.camera.x * 0.12) * CONFIG.METER_TO_PX + W / 2;
-      const parallaxY = (s.y - game.camera.y * 0.05) * CONFIG.METER_TO_PX + H * 0.18;
-      if (parallaxX < -4 || parallaxX > W + 4 || parallaxY < -4 || parallaxY > H + 4) continue;
+      const parallaxX = ((s.x - starParallaxShift + 40) % starWrapW + starWrapW) % starWrapW - 40;
+      const parallaxY = s.y - game.camera.y * CONFIG.METER_TO_PX * 0.02;
+      if (parallaxX < -4 || parallaxX > W + 4 || parallaxY < -6 || parallaxY > getGameplayHeight() + 6) continue;
       ctx.globalAlpha = s.a;
       ctx.fillStyle = '#fff';
       ctx.beginPath();
