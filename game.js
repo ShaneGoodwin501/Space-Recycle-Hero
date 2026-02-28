@@ -1959,7 +1959,7 @@
 
     const speedRadius = gaugeSize * 0.36;
     // Safe landing band at low speed.
-    ctx.strokeStyle = '#7dff9c';
+    ctx.strokeStyle = '#ffb347';
     ctx.lineWidth = 4;
     ctx.beginPath();
     ctx.arc(sgx, sgy, speedRadius, speedStartAng, safeAng, false);
