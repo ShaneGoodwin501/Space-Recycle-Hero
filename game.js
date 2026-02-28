@@ -2537,8 +2537,24 @@
       if (y > panelY + panelH - Math.floor(clamp(42 * uiScale, 24, 56))) break;
     }
 
-    y += Math.floor(clamp(4 * uiScale, 2, 8));
-    drawWrappedText('Land gently on skids, refuel pads refill fuel, and recycle pads score delivered cargo.', contentX, y, contentW, Math.floor(clamp(bodySize * 1.3, 14, 28)), '#bfe8c8', `600 ${bodySize}px Segoe UI`);
+    const footerLineH = Math.floor(clamp(bodySize * 1.3, 14, 28));
+    const footerText = 'Land gently on skids, refuel pads refill fuel, and recycle pads score delivered cargo.';
+    ctx.font = `600 ${bodySize}px Segoe UI`;
+    const footerWords = footerText.split(' ');
+    let footerLines = 1;
+    let probeLine = '';
+    for (const word of footerWords) {
+      const nextProbe = probeLine ? `${probeLine} ${word}` : word;
+      if (ctx.measureText(nextProbe).width > contentW && probeLine) {
+        footerLines += 1;
+        probeLine = word;
+      } else {
+        probeLine = nextProbe;
+      }
+    }
+
+    const footerY = panelY + panelH - colPad - footerLineH * footerLines;
+    drawWrappedText(footerText, contentX, footerY, contentW, footerLineH, '#bfe8c8', `600 ${bodySize}px Segoe UI`);
   }
 
 
