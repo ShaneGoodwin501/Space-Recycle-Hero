@@ -31,7 +31,7 @@
 
     worldWidth: 260,
     terrainStep: 2,
-    starCount: 408,
+    starCount: 1632,
     planetCount: 8,
 
     cameraSmooth: 4,
@@ -230,7 +230,7 @@
   function regenerateStars() {
     stars = Array.from({ length: CONFIG.starCount }, () => ({
       x: Math.random() * CONFIG.worldWidth,
-      y: Math.random() * 85 - 18,
+      y: Math.random() * 210 - 70,
       r: Math.random() * 1.8 + 0.2,
       a: Math.random() * 0.72 + 0.18,
     }));
@@ -1519,6 +1519,7 @@
     ctx.fillStyle = '#d5dbe6';
     ctx.fillRect(tr.x * m, trayVisualY * m, trayVisualW * m, trayVisualH * m);
     ctx.strokeStyle = '#18202c';
+    ctx.lineWidth = 1.5;
     ctx.strokeRect(tr.x * m, trayVisualY * m, trayVisualW * m, trayVisualH * m);
     ctx.fillStyle = '#d5dbe6';
     ctx.fillRect(tr.x * m, trayVisualY * m, trayEdgeW, trayVisualH * m);
