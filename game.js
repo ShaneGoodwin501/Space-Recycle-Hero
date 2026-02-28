@@ -1942,23 +1942,45 @@
     const sgy = panelY + panelH * 0.68;
     const speedMps = Math.hypot(ship.vx, ship.vy);
     const speedMax = 12;
+    const safeLandingSpeed = CONFIG.landingMaxSpeed;
     const speedNorm = clamp(speedMps / speedMax, 0, 1);
-    const speedAng = lerp(Math.PI * 0.86, Math.PI * 0.14, speedNorm);
+    const safeNorm = clamp(safeLandingSpeed / speedMax, 0, 1);
+    const redNorm = 0.84;
+    const speedStartAng = Math.PI * (7 / 6); // 7 o'clock
+    const speedEndAng = Math.PI * (11 / 6); // sweep clockwise toward top-right
+    const safeAng = lerp(speedStartAng, speedEndAng, safeNorm);
+    const redStartAng = lerp(speedStartAng, speedEndAng, redNorm);
+    const speedAng = lerp(speedStartAng, speedEndAng, speedNorm);
 
     ctx.fillStyle = '#000';
     ctx.fillRect(speedX, panelY, speedW, panelH);
     ctx.strokeStyle = '#0b5';
     ctx.strokeRect(speedX, panelY, speedW, panelH);
+
+    const speedRadius = gaugeSize * 0.36;
+    // Safe landing band at low speed.
     ctx.strokeStyle = '#7dff9c';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.arc(sgx, sgy, gaugeSize * 0.36, Math.PI * 0.86, Math.PI * 0.14, false);
+    ctx.arc(sgx, sgy, speedRadius, speedStartAng, safeAng, false);
+    ctx.stroke();
+    // Normal operating speed range.
+    ctx.strokeStyle = '#42d76d';
+    ctx.beginPath();
+    ctx.arc(sgx, sgy, speedRadius, safeAng, redStartAng, false);
+    ctx.stroke();
+    // Top-end danger speed range.
+    ctx.strokeStyle = '#ff6464';
+    ctx.beginPath();
+    ctx.arc(sgx, sgy, speedRadius, redStartAng, speedEndAng, false);
     ctx.stroke();
 
-    for (let i = 0; i <= 4; i++) {
-      const t = i / 4;
-      const a = lerp(Math.PI * 0.86, Math.PI * 0.14, t);
-      const rOuter = gaugeSize * 0.36;
+    ctx.strokeStyle = '#7dff9c';
+    ctx.lineWidth = 2;
+    for (let i = 0; i <= 6; i++) {
+      const t = i / 6;
+      const a = lerp(speedStartAng, speedEndAng, t);
+      const rOuter = speedRadius;
       const rInner = rOuter - gaugeSize * 0.055;
       ctx.beginPath();
       ctx.moveTo(sgx + Math.cos(a) * rInner, sgy + Math.sin(a) * rInner);
