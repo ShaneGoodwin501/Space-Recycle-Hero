@@ -139,14 +139,16 @@
       const togglingToFolded = !ship.armFolded;
       ship.armFolded = togglingToFolded;
       if (togglingToFolded) {
-        ship.armDeployPose.baseAngle = ship.baseAngle;
-        ship.armDeployPose.seg1Angle = ship.seg1Angle;
-        ship.armDeployPose.seg2Angle = ship.seg2Angle;
-        ship.armDeployPose.clawOpen = ship.clawOpen;
         if (ship.grabbedCargo) {
           ship.grabbedCargo.grabbed = false;
           ship.grabbedCargo = null;
         }
+      } else {
+        const unfoldPose = getDefaultUnfoldedArmPose();
+        ship.armDeployPose.baseAngle = unfoldPose.baseAngle;
+        ship.armDeployPose.seg1Angle = unfoldPose.seg1Angle;
+        ship.armDeployPose.seg2Angle = unfoldPose.seg2Angle;
+        ship.armDeployPose.clawOpen = unfoldPose.clawOpen;
       }
     }
     if (e.code === 'Escape' && game.state !== 'CRASHED' && game.state !== 'READY') {
@@ -166,6 +168,16 @@
     if (Math.abs(target - value) <= maxDelta) return target;
     return value + Math.sign(target - value) * maxDelta;
   };
+
+  function getDefaultUnfoldedArmPose() {
+    // High, ready-to-use pose that unfolds toward the ship's right side.
+    return {
+      baseAngle: 78 * Math.PI / 180,
+      seg1Angle: 2.55,
+      seg2Angle: 2.72,
+      clawOpen: 1,
+    };
+  }
 
   function rotate(v, a) {
     const c = Math.cos(a), s = Math.sin(a);
@@ -583,10 +595,15 @@
     ship.gearSafetyTimer = 0;
     ship.armFolded = false;
     ship.armFoldBlend = 0;
-    ship.armDeployPose.baseAngle = ship.baseAngle;
-    ship.armDeployPose.seg1Angle = ship.seg1Angle;
-    ship.armDeployPose.seg2Angle = ship.seg2Angle;
-    ship.armDeployPose.clawOpen = ship.clawOpen;
+    const unfoldPose = getDefaultUnfoldedArmPose();
+    ship.armDeployPose.baseAngle = unfoldPose.baseAngle;
+    ship.armDeployPose.seg1Angle = unfoldPose.seg1Angle;
+    ship.armDeployPose.seg2Angle = unfoldPose.seg2Angle;
+    ship.armDeployPose.clawOpen = unfoldPose.clawOpen;
+    ship.baseAngle = unfoldPose.baseAngle;
+    ship.seg1Angle = unfoldPose.seg1Angle;
+    ship.seg2Angle = unfoldPose.seg2Angle;
+    ship.clawOpen = unfoldPose.clawOpen;
     ship.angle = 0;
     ship.av = 0;
     randomizeWorld();
@@ -943,10 +960,15 @@
     ship.gearSafetyTimer = 0;
     ship.armFolded = false;
     ship.armFoldBlend = 0;
-    ship.armDeployPose.baseAngle = ship.baseAngle;
-    ship.armDeployPose.seg1Angle = ship.seg1Angle;
-    ship.armDeployPose.seg2Angle = ship.seg2Angle;
-    ship.armDeployPose.clawOpen = ship.clawOpen;
+    const unfoldPose = getDefaultUnfoldedArmPose();
+    ship.armDeployPose.baseAngle = unfoldPose.baseAngle;
+    ship.armDeployPose.seg1Angle = unfoldPose.seg1Angle;
+    ship.armDeployPose.seg2Angle = unfoldPose.seg2Angle;
+    ship.armDeployPose.clawOpen = unfoldPose.clawOpen;
+    ship.baseAngle = unfoldPose.baseAngle;
+    ship.seg1Angle = unfoldPose.seg1Angle;
+    ship.seg2Angle = unfoldPose.seg2Angle;
+    ship.clawOpen = unfoldPose.clawOpen;
     setShipOnGround();
     game.camera.x = ship.x;
     game.camera.y = ship.y - 6;
@@ -1036,11 +1058,11 @@
 
     ship.armFoldBlend = moveTowards(ship.armFoldBlend, ship.armFolded ? 1 : 0, CONFIG.armFoldRate * dt);
     const foldedPose = {
-      // Fold flat on top: first segment extends horizontally, second folds back over it.
-      baseAngle: 90 * Math.PI / 180,
-      seg1Angle: 270 * Math.PI / 180,
-      seg2Angle: 90 * Math.PI / 180,
-      clawOpen: 0.05,
+      // Swing toward front/top-center, then compact tightly for flight.
+      baseAngle: 4 * Math.PI / 180,
+      seg1Angle: Math.PI / 2,
+      seg2Angle: Math.PI / 2,
+      clawOpen: 0.02,
     };
     if (ship.armFolded || ship.armFoldBlend > 0.001) {
       ship.baseAngle = lerp(ship.armDeployPose.baseAngle, foldedPose.baseAngle, ship.armFoldBlend);
@@ -1946,79 +1968,89 @@
 
     // Crane segments
     const base = shipShape.craneBase;
-    const bAng = -Math.PI / 2 + ship.baseAngle;
-    const seg1Len = 2.14;
-    const seg2Len = 1.91;
-    const p1 = { x: base.x + Math.cos(bAng) * seg1Len, y: base.y + Math.sin(bAng) * seg1Len };
-    const a1 = bAng + (ship.seg1Angle - Math.PI / 2);
-    const p2 = { x: p1.x + Math.cos(a1) * seg2Len, y: p1.y + Math.sin(a1) * seg2Len };
-    const a2 = a1 + (ship.seg2Angle - Math.PI / 2);
+    if (ship.armFoldBlend > 0.92) {
+      // Flight-compact visual: arm appears as a small red square on top center.
+      const box = 0.17 * m;
+      ctx.fillStyle = '#ff2f2f';
+      ctx.fillRect(base.x * m - box * 0.5, base.y * m - box * 0.5, box, box);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.6;
+      ctx.strokeRect(base.x * m - box * 0.5, base.y * m - box * 0.5, box, box);
+    } else {
+      const bAng = -Math.PI / 2 + ship.baseAngle;
+      const seg1Len = 2.14;
+      const seg2Len = 1.91;
+      const p1 = { x: base.x + Math.cos(bAng) * seg1Len, y: base.y + Math.sin(bAng) * seg1Len };
+      const a1 = bAng + (ship.seg1Angle - Math.PI / 2);
+      const p2 = { x: p1.x + Math.cos(a1) * seg2Len, y: p1.y + Math.sin(a1) * seg2Len };
+      const a2 = a1 + (ship.seg2Angle - Math.PI / 2);
 
-    const armThickness = 6.4;
-    const jointDiameter = armThickness * 1.3;
-    const jointRadiusPx = jointDiameter * 0.5 * 1.3;
-    const innerJointRadiusPx = jointRadiusPx * 0.5;
+      const armThickness = 6.4;
+      const jointDiameter = armThickness * 1.3;
+      const jointRadiusPx = jointDiameter * 0.5 * 1.3;
+      const innerJointRadiusPx = jointRadiusPx * 0.5;
 
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = armThickness;
-    ctx.beginPath();
-    ctx.moveTo(base.x * m, base.y * m);
-    ctx.lineTo(p1.x * m, p1.y * m);
-    ctx.lineTo(p2.x * m, p2.y * m);
-    ctx.stroke();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = armThickness;
+      ctx.beginPath();
+      ctx.moveTo(base.x * m, base.y * m);
+      ctx.lineTo(p1.x * m, p1.y * m);
+      ctx.lineTo(p2.x * m, p2.y * m);
+      ctx.stroke();
 
-    // Claw (single-color white, fully connected to arm by a rectangular coupler)
-    const open = lerp(0.03, 0.42, ship.clawOpen);
-    const tip = { x: p2.x + Math.cos(a2) * 0.26, y: p2.y + Math.sin(a2) * 0.26 };
-    const n = { x: Math.cos(a2 + Math.PI / 2), y: Math.sin(a2 + Math.PI / 2) };
-    const forward = { x: Math.cos(a2), y: Math.sin(a2) };
+      // Claw (single-color white, fully connected to arm by a rectangular coupler)
+      const open = lerp(0.03, 0.42, ship.clawOpen);
+      const tip = { x: p2.x + Math.cos(a2) * 0.26, y: p2.y + Math.sin(a2) * 0.26 };
+      const n = { x: Math.cos(a2 + Math.PI / 2), y: Math.sin(a2 + Math.PI / 2) };
+      const forward = { x: Math.cos(a2), y: Math.sin(a2) };
 
-    // Rectangular connector to remove visual gap from arm to claw fingers.
-    const couplerLen = 0.22;
-    const couplerHalfW = 0.08;
-    const c0 = { x: p2.x - n.x * couplerHalfW, y: p2.y - n.y * couplerHalfW };
-    const c1 = { x: p2.x + n.x * couplerHalfW, y: p2.y + n.y * couplerHalfW };
-    const c2 = { x: p2.x + forward.x * couplerLen + n.x * couplerHalfW, y: p2.y + forward.y * couplerLen + n.y * couplerHalfW };
-    const c3 = { x: p2.x + forward.x * couplerLen - n.x * couplerHalfW, y: p2.y + forward.y * couplerLen - n.y * couplerHalfW };
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.moveTo(c0.x * m, c0.y * m);
-    ctx.lineTo(c1.x * m, c1.y * m);
-    ctx.lineTo(c2.x * m, c2.y * m);
-    ctx.lineTo(c3.x * m, c3.y * m);
-    ctx.closePath();
-    ctx.fill();
-
-    function drawFinger(sign) {
-      const root = { x: tip.x + n.x * open * sign, y: tip.y + n.y * open * sign };
-      const pA = { x: root.x + forward.x * 0.44, y: root.y + forward.y * 0.44 };
-      const pB = { x: root.x + n.x * 0.24 * sign, y: root.y + n.y * 0.24 * sign };
+      // Rectangular connector to remove visual gap from arm to claw fingers.
+      const couplerLen = 0.22;
+      const couplerHalfW = 0.08;
+      const c0 = { x: p2.x - n.x * couplerHalfW, y: p2.y - n.y * couplerHalfW };
+      const c1 = { x: p2.x + n.x * couplerHalfW, y: p2.y + n.y * couplerHalfW };
+      const c2 = { x: p2.x + forward.x * couplerLen + n.x * couplerHalfW, y: p2.y + forward.y * couplerLen + n.y * couplerHalfW };
+      const c3 = { x: p2.x + forward.x * couplerLen - n.x * couplerHalfW, y: p2.y + forward.y * couplerLen - n.y * couplerHalfW };
       ctx.fillStyle = '#ffffff';
       ctx.beginPath();
-      ctx.moveTo(root.x * m, root.y * m);
-      ctx.lineTo(pA.x * m, pA.y * m);
-      ctx.lineTo(pB.x * m, pB.y * m);
+      ctx.moveTo(c0.x * m, c0.y * m);
+      ctx.lineTo(c1.x * m, c1.y * m);
+      ctx.lineTo(c2.x * m, c2.y * m);
+      ctx.lineTo(c3.x * m, c3.y * m);
       ctx.closePath();
       ctx.fill();
-    }
-    drawFinger(1);
-    drawFinger(-1);
 
-    // Joint circles for arm joints (30% larger than previous size).
-    function drawJoint(localPoint) {
-      ctx.fillStyle = '#ff2f2f';
-      ctx.beginPath();
-      ctx.arc(localPoint.x * m, localPoint.y * m, jointRadiusPx, 0, Math.PI * 2);
-      ctx.fill();
+      function drawFinger(sign) {
+        const root = { x: tip.x + n.x * open * sign, y: tip.y + n.y * open * sign };
+        const pA = { x: root.x + forward.x * 0.44, y: root.y + forward.y * 0.44 };
+        const pB = { x: root.x + n.x * 0.24 * sign, y: root.y + n.y * 0.24 * sign };
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.moveTo(root.x * m, root.y * m);
+        ctx.lineTo(pA.x * m, pA.y * m);
+        ctx.lineTo(pB.x * m, pB.y * m);
+        ctx.closePath();
+        ctx.fill();
+      }
+      drawFinger(1);
+      drawFinger(-1);
 
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(localPoint.x * m, localPoint.y * m, innerJointRadiusPx, 0, Math.PI * 2);
-      ctx.fill();
+      // Joint circles for arm joints (30% larger than previous size).
+      function drawJoint(localPoint) {
+        ctx.fillStyle = '#ff2f2f';
+        ctx.beginPath();
+        ctx.arc(localPoint.x * m, localPoint.y * m, jointRadiusPx, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(localPoint.x * m, localPoint.y * m, innerJointRadiusPx, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      drawJoint(base);
+      drawJoint(p1);
+      drawJoint(p2);
     }
-    drawJoint(base);
-    drawJoint(p1);
-    drawJoint(p2);
 
     ctx.restore();
   }
