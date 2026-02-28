@@ -1007,6 +1007,13 @@
     }
 
     ship.landed = (tracksDriving && hasSkid) || (hasSkid && angleOk && speedOk && (verticalOk || ship.settleLock)) || (!tracksDriving && hullHitTerrain && speed < CONFIG.landingMaxSpeed * CONFIG.impactRobustness);
+    const liftOffRequested = !tracksDriving && !tracksLock && ship.throttle >= 0.2 && ship.fuel > 0;
+    if (ship.landed && liftOffRequested) {
+      ship.landed = false;
+      ship.settleLock = false;
+      ship.bounceCount = 0;
+      ship.vy = Math.min(ship.vy, -0.35);
+    }
     if (tracksDriving && ship.landed) {
       ship.angle = lerp(ship.angle, 0, clamp(8 * dt, 0, 1));
       ship.av *= 0.4;
