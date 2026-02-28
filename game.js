@@ -1008,7 +1008,7 @@
 
     if (ship.invincibleTimer <= 0) {
       for (const c of cargos) {
-        if (c.scored || c.accepting || c.stored || c.grabbed || c.popping) continue;
+        if (c.scored || c.accepting || c.stored || c.grabbed || c.popping || c.ignoreTrayTimer > 0) continue;
         if (Math.hypot(c.x - hullCenter.x, c.y - hullCenter.y) < c.r + shipShape.hullRadius * (0.8 / CONFIG.impactRobustness)) {
           return crashShip('hull-cargo');
         }
@@ -1263,18 +1263,19 @@
       return ship.storedCargoIds.length < CONFIG.trayCapacity;
     }
 
-    function bounceCargoOffTrayTop(c, tr, local) {
+    function bounceCargoOffTrayTop(c, tr) {
       const bounceLocal = {
-        x: clamp(local.x, tr.x + c.r, tr.x + tr.w - c.r),
-        y: tr.y - c.r - 0.03,
+        x: tr.x - c.r - 0.09,
+        y: tr.y - c.r - 0.04,
       };
       const bounceWorld = worldFromLocal(ship, bounceLocal);
       c.x = bounceWorld.x;
       c.y = bounceWorld.y;
+      const left = rotate({ x: -1, y: 0 }, ship.angle);
       const up = rotate({ x: 0, y: -1 }, ship.angle);
-      c.vx = ship.vx + up.x * (1.2 + Math.random() * 0.8) + (Math.random() - 0.5) * 0.8;
-      c.vy = ship.vy + up.y * (1.2 + Math.random() * 0.8) - (0.2 + Math.random() * 0.5);
-      c.ignoreTrayTimer = 0.45;
+      c.vx = ship.vx + left.x * (1.5 + Math.random() * 0.8) + up.x * 0.35;
+      c.vy = ship.vy + left.y * (1.5 + Math.random() * 0.8) + up.y * 0.95;
+      c.ignoreTrayTimer = 0.9;
       c.restTimer = 0;
     }
 
@@ -1286,7 +1287,7 @@
       const inTray = local.x > tr.x + c.r && local.x < tr.x + tr.w - c.r && local.y > tr.y + c.r && local.y < tr.y + tr.h - c.r;
       if (!inTray) continue;
       if (!trayHasCapacity()) {
-        bounceCargoOffTrayTop(c, tr, local);
+        bounceCargoOffTrayTop(c, tr);
         continue;
       }
       c.stored = true;
@@ -1311,7 +1312,7 @@
           if (!trayHasCapacity()) {
             c.grabbed = false;
             ship.grabbedCargo = null;
-            bounceCargoOffTrayTop(c, tr, local);
+            bounceCargoOffTrayTop(c, tr);
           } else {
             c.grabbed = false;
             c.stored = true;
