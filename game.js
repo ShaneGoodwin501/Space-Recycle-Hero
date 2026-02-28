@@ -2450,9 +2450,8 @@
       ctx.closePath();
     }
 
-    function drawWrappedText(text, x, y, maxW, lineH, color = '#d9e7f8', font = `500 ${bodySize}px Segoe UI`, align = 'left') {
+    function getWrappedLines(text, maxW, font = `500 ${bodySize}px Segoe UI`) {
       ctx.font = font;
-      ctx.fillStyle = color;
       const words = text.split(' ');
       const lines = [];
       let line = '';
@@ -2464,6 +2463,13 @@
         } else line = probe;
       }
       if (line) lines.push(line);
+      return lines;
+    }
+
+    function drawWrappedText(text, x, y, maxW, lineH, color = '#d9e7f8', font = `500 ${bodySize}px Segoe UI`, align = 'left') {
+      const lines = getWrappedLines(text, maxW, font);
+      ctx.font = font;
+      ctx.fillStyle = color;
 
       let yy = y;
       if (align === 'right') {
@@ -2603,7 +2609,11 @@
     for (const row of controls) {
       const cap = drawKeycaps(row.keys, contentX, y);
       const descLineH = Math.floor(clamp(bodySize * 1.3, 14, 28));
-      const descYEnd = drawWrappedText(row.text, descX, y + Math.max(1, Math.floor((cap.height - descLineH) * 0.22)), descW, descLineH, '#f0f5ff', `600 ${bodySize}px Segoe UI`, 'left');
+      const descFont = `600 ${bodySize}px Segoe UI`;
+      const descLines = getWrappedLines(row.text, descW, descFont);
+      const descBlockH = descLines.length * descLineH;
+      const descY = y + Math.max(0, Math.floor((cap.height - descBlockH) * 0.5));
+      const descYEnd = drawWrappedText(row.text, descX, descY, descW, descLineH, '#f0f5ff', descFont, 'left');
       y = Math.max(y + cap.height, descYEnd) + Math.floor(clamp(8 * uiScale, 5, 10));
     }
 
