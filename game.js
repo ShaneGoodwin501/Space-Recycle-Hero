@@ -28,7 +28,7 @@
     baseRate: 47.5 * Math.PI / 180,
     seg1Rate: 55 * Math.PI / 180,
     seg2Rate: 55 * Math.PI / 180,
-    armFoldDurationSec: 3,
+    armFoldDurationSec: 5,
 
     worldWidth: 260,
     terrainStep: 2,
@@ -1984,15 +1984,7 @@
 
     // Crane segments
     const base = shipShape.craneBase;
-    if (ship.armFolded && ship.armFoldBlend > 0.995) {
-      // Flight-compact visual: arm appears as a small red square on top center.
-      const box = 0.17 * m;
-      ctx.fillStyle = '#ff2f2f';
-      ctx.fillRect(base.x * m - box * 0.5, base.y * m - box * 0.5, box, box);
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1.6;
-      ctx.strokeRect(base.x * m - box * 0.5, base.y * m - box * 0.5, box, box);
-    } else {
+    {
       const bAng = -Math.PI / 2 + ship.baseAngle;
       const seg1Len = 2.14;
       const seg2Len = 1.91;
