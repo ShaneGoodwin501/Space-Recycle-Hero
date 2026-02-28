@@ -2595,7 +2595,7 @@
     for (const row of controls) {
       const cap = drawKeycaps(row.keys, contentX, y);
       const descLineH = Math.floor(clamp(bodySize * 1.3, 14, 28));
-      const descYEnd = drawWrappedText(row.text, descX, y + Math.max(1, Math.floor((cap.height - descLineH) * 0.22)), descW, descLineH, '#f0f5ff', `600 ${bodySize}px Segoe UI`, 'right');
+      const descYEnd = drawWrappedText(row.text, descX, y + Math.max(1, Math.floor((cap.height - descLineH) * 0.22)), descW, descLineH, '#f0f5ff', `600 ${bodySize}px Segoe UI`, 'left');
       y = Math.max(y + cap.height, descYEnd) + Math.floor(clamp(8 * uiScale, 5, 10));
     }
 
