@@ -331,6 +331,7 @@
     gearSafetyTimer: 0,
     armFolded: false,
     armFoldBlend: 0,
+    armStowDrop: 0,
     armDeployPose: {
       baseAngle: 0,
       seg1Angle: 2.9,
@@ -595,6 +596,7 @@
     ship.gearSafetyTimer = 0;
     ship.armFolded = false;
     ship.armFoldBlend = 0;
+    ship.armStowDrop = 0;
     const unfoldPose = getDefaultUnfoldedArmPose();
     ship.armDeployPose.baseAngle = unfoldPose.baseAngle;
     ship.armDeployPose.seg1Angle = unfoldPose.seg1Angle;
@@ -879,7 +881,8 @@
   game.camera.y = ship.y - 6;
 
   function getArmKinematics() {
-    const base = worldFromLocal(ship, shipShape.craneBase);
+    const baseLocal = { x: shipShape.craneBase.x, y: shipShape.craneBase.y + ship.armStowDrop * 1.28 };
+    const base = worldFromLocal(ship, baseLocal);
     const shipUpAngle = ship.angle - Math.PI / 2;
     const a0 = shipUpAngle + ship.baseAngle;
     const seg1Len = 2.14;
@@ -960,6 +963,7 @@
     ship.gearSafetyTimer = 0;
     ship.armFolded = false;
     ship.armFoldBlend = 0;
+    ship.armStowDrop = 0;
     const unfoldPose = getDefaultUnfoldedArmPose();
     ship.armDeployPose.baseAngle = unfoldPose.baseAngle;
     ship.armDeployPose.seg1Angle = unfoldPose.seg1Angle;
@@ -1062,29 +1066,18 @@
       baseAngle: 0,
       seg1Angle: Math.PI / 2,
       seg2Angle: Math.PI / 2,
-      clawOpen: 0.3,
+      clawOpen: 0.18,
     };
-    const stowedPose = {
-      // Step 2: fold the raised arm down into the ship body.
-      baseAngle: 2 * Math.PI / 180,
-      seg1Angle: Math.PI,
-      seg2Angle: Math.PI,
-      clawOpen: 0.02,
-    };
+    // Step 2: keep the arm vertical and lower it straight down into the ship.
+    const lowerStart = 0.72;
+    const lowerT = clamp((ship.armFoldBlend - lowerStart) / (1 - lowerStart), 0, 1);
+    ship.armStowDrop = lowerT;
     if (ship.armFolded || ship.armFoldBlend > 0.001) {
-      if (ship.armFoldBlend <= 0.5) {
-        const tFoldUp = ship.armFoldBlend / 0.5;
-        ship.baseAngle = lerp(ship.armDeployPose.baseAngle, verticalPose.baseAngle, tFoldUp);
-        ship.seg1Angle = lerp(ship.armDeployPose.seg1Angle, verticalPose.seg1Angle, tFoldUp);
-        ship.seg2Angle = lerp(ship.armDeployPose.seg2Angle, verticalPose.seg2Angle, tFoldUp);
-        ship.clawOpen = lerp(ship.armDeployPose.clawOpen, verticalPose.clawOpen, tFoldUp);
-      } else {
-        const tStow = (ship.armFoldBlend - 0.5) / 0.5;
-        ship.baseAngle = lerp(verticalPose.baseAngle, stowedPose.baseAngle, tStow);
-        ship.seg1Angle = lerp(verticalPose.seg1Angle, stowedPose.seg1Angle, tStow);
-        ship.seg2Angle = lerp(verticalPose.seg2Angle, stowedPose.seg2Angle, tStow);
-        ship.clawOpen = lerp(verticalPose.clawOpen, stowedPose.clawOpen, tStow);
-      }
+      const tFoldUp = clamp(ship.armFoldBlend / lowerStart, 0, 1);
+      ship.baseAngle = lerp(ship.armDeployPose.baseAngle, verticalPose.baseAngle, tFoldUp);
+      ship.seg1Angle = lerp(ship.armDeployPose.seg1Angle, verticalPose.seg1Angle, tFoldUp);
+      ship.seg2Angle = lerp(ship.armDeployPose.seg2Angle, verticalPose.seg2Angle, tFoldUp);
+      ship.clawOpen = lerp(ship.armDeployPose.clawOpen, verticalPose.clawOpen, tFoldUp);
     }
 
     const trayTarget = ship.trayExtended ? 1 : 0;
@@ -1983,7 +1976,7 @@
     }
 
     // Crane segments
-    const base = shipShape.craneBase;
+    const base = { x: shipShape.craneBase.x, y: shipShape.craneBase.y + ship.armStowDrop * 1.28 };
     {
       const bAng = -Math.PI / 2 + ship.baseAngle;
       const seg1Len = 2.14;
