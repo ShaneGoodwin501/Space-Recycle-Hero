@@ -28,6 +28,7 @@
     baseRate: 47.5 * Math.PI / 180,
     seg1Rate: 55 * Math.PI / 180,
     seg2Rate: 55 * Math.PI / 180,
+    armFoldDurationSec: 5,
 
     worldWidth: 260,
     terrainStep: 2,
@@ -47,6 +48,7 @@
     trackDriveAccel: 4.8,
     trackDriveMaxSpeed: 1.35,
     landingGearTransitionSec: 2,
+    trayCapacity: 5,
   };
 
   const canvas = document.getElementById('gameCanvas');
@@ -86,7 +88,7 @@
   resize();
 
   const keys = new Set();
-  const blocked = new Set(['KeyW','KeyA','KeyS','KeyD','KeyI','KeyO','KeyK','KeyL','KeyN','KeyM','Comma','Period','Space','Escape','KeyH','KeyQ','KeyE']);
+  const blocked = new Set(['KeyW','KeyA','KeyS','KeyD','KeyI','KeyO','KeyK','KeyL','KeyN','KeyM','Comma','Period','Space','Escape','KeyH','KeyQ','KeyE','KeyF']);
   function unlockAudioFromUserGesture() {
     initAudio();
     if (game.audio?.ctx && game.audio.ctx.state !== 'running') game.audio.ctx.resume();
@@ -100,7 +102,10 @@
 
     if (e.code === 'Space') {
       if (game.state === 'READY') startMission();
-      else if (game.state === 'PLAYING') ship.trayExtended = !ship.trayExtended;
+      else if (game.state === 'PLAYING') {
+        ship.trayExtended = !ship.trayExtended;
+        playTraySealSound(ship.trayExtended);
+      }
     }
     if (e.code === 'KeyH') {
       if (game.state === 'PLAYING') {
@@ -130,6 +135,22 @@
         ship.gearSafetyTimer = CONFIG.landingGearTransitionSec + 0.35;
       }
     }
+    if (e.code === 'KeyF' && game.state === 'PLAYING') {
+      const togglingToFolded = !ship.armFolded;
+      ship.armFolded = togglingToFolded;
+      if (togglingToFolded) {
+        if (ship.grabbedCargo) {
+          ship.grabbedCargo.grabbed = false;
+          ship.grabbedCargo = null;
+        }
+      } else {
+        const unfoldPose = getDefaultUnfoldedArmPose();
+        ship.armDeployPose.baseAngle = unfoldPose.baseAngle;
+        ship.armDeployPose.seg1Angle = unfoldPose.seg1Angle;
+        ship.armDeployPose.seg2Angle = unfoldPose.seg2Angle;
+        ship.armDeployPose.clawOpen = unfoldPose.clawOpen;
+      }
+    }
     if (e.code === 'Escape' && game.state !== 'CRASHED' && game.state !== 'READY') {
       game.paused = !game.paused;
       if (!game.paused) game.showHelp = false;
@@ -147,6 +168,18 @@
     if (Math.abs(target - value) <= maxDelta) return target;
     return value + Math.sign(target - value) * maxDelta;
   };
+
+  function getDefaultUnfoldedArmPose() {
+    // High, ready-to-use pose that unfolds toward the ship's right side.
+    return {
+      baseAngle: 78 * Math.PI / 180,
+      seg1Angle: 2.55,
+      seg2Angle: 2.72,
+      clawOpen: 1,
+    };
+  }
+
+  const ARM_STOW_DROP_MAX = 2.55;
 
   function rotate(v, a) {
     const c = Math.cos(a), s = Math.sin(a);
@@ -298,6 +331,15 @@
     gearExtended: false,
     gearDeploy: 0,
     gearSafetyTimer: 0,
+    armFolded: false,
+    armFoldBlend: 0,
+    armStowDrop: 0,
+    armDeployPose: {
+      baseAngle: 0,
+      seg1Angle: 2.9,
+      seg2Angle: 3.05,
+      clawOpen: 1,
+    },
   };
 
   function shipMass() {
@@ -547,13 +589,25 @@
     ship.bounceCount = 0;
     ship.settleLock = false;
     ship.invincibleTimer = 0;
-    ship.trayExtended = true;
-    ship.traySlide = 1;
+    ship.trayExtended = false;
+    ship.traySlide = 0;
     ship.tracksExtended = false;
     ship.tracksDeploy = 0;
     ship.gearExtended = true;
     ship.gearDeploy = 1;
     ship.gearSafetyTimer = 0;
+    ship.armFolded = false;
+    ship.armFoldBlend = 0;
+    ship.armStowDrop = 0;
+    const unfoldPose = getDefaultUnfoldedArmPose();
+    ship.armDeployPose.baseAngle = unfoldPose.baseAngle;
+    ship.armDeployPose.seg1Angle = unfoldPose.seg1Angle;
+    ship.armDeployPose.seg2Angle = unfoldPose.seg2Angle;
+    ship.armDeployPose.clawOpen = unfoldPose.clawOpen;
+    ship.baseAngle = unfoldPose.baseAngle;
+    ship.seg1Angle = unfoldPose.seg1Angle;
+    ship.seg2Angle = unfoldPose.seg2Angle;
+    ship.clawOpen = unfoldPose.clawOpen;
     ship.angle = 0;
     ship.av = 0;
     randomizeWorld();
@@ -641,6 +695,24 @@
     hydroGain.connect(master);
     hydro.start();
 
+    const trackEngineGain = ctxA.createGain();
+    trackEngineGain.gain.value = 0;
+    const trackEngine = ctxA.createOscillator();
+    trackEngine.type = 'sawtooth';
+    trackEngine.frequency.value = 42;
+    const trackEngineSub = ctxA.createOscillator();
+    trackEngineSub.type = 'triangle';
+    trackEngineSub.frequency.value = 28;
+    const trackEngineFilter = ctxA.createBiquadFilter();
+    trackEngineFilter.type = 'lowpass';
+    trackEngineFilter.frequency.value = 300;
+    trackEngine.connect(trackEngineFilter);
+    trackEngineSub.connect(trackEngineFilter);
+    trackEngineFilter.connect(trackEngineGain);
+    trackEngineGain.connect(master);
+    trackEngine.start();
+    trackEngineSub.start();
+
     game.audio = {
       ctx: ctxA,
       master,
@@ -650,7 +722,113 @@
       rocketToneGain,
       hydro,
       hydroGain,
+      trackEngine,
+      trackEngineSub,
+      trackEngineGain,
+      trackEngineFilter,
+      lastThudTime: -10,
     };
+  }
+
+
+  function playTraySealSound(opening) {
+    const a = game.audio;
+    if (!a) return;
+    const now = a.ctx.currentTime;
+
+    const tone = a.ctx.createOscillator();
+    tone.type = 'square';
+    tone.frequency.setValueAtTime(opening ? 320 : 250, now);
+    tone.frequency.exponentialRampToValueAtTime(opening ? 170 : 135, now + 0.17);
+
+    const hiss = a.ctx.createOscillator();
+    hiss.type = 'sawtooth';
+    hiss.frequency.setValueAtTime(opening ? 540 : 440, now);
+    hiss.frequency.exponentialRampToValueAtTime(opening ? 280 : 220, now + 0.12);
+
+    const gain = a.ctx.createGain();
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.085, now + 0.018);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.24);
+
+    const filter = a.ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(opening ? 1200 : 980, now);
+
+    tone.connect(filter);
+    hiss.connect(filter);
+    filter.connect(gain);
+    gain.connect(a.master);
+
+    tone.start(now);
+    hiss.start(now);
+    tone.stop(now + 0.25);
+    hiss.stop(now + 0.17);
+  }
+
+
+  function playExplosionSound() {
+    const a = game.audio;
+    if (!a) return;
+    const now = a.ctx.currentTime;
+
+    const boom = a.ctx.createOscillator();
+    boom.type = 'triangle';
+    boom.frequency.setValueAtTime(140, now);
+    boom.frequency.exponentialRampToValueAtTime(42, now + 0.38);
+
+    const tail = a.ctx.createOscillator();
+    tail.type = 'sawtooth';
+    tail.frequency.setValueAtTime(95, now);
+    tail.frequency.exponentialRampToValueAtTime(28, now + 0.48);
+
+    const gain = a.ctx.createGain();
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(0.22, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.52);
+
+    const filter = a.ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(800, now);
+
+    boom.connect(filter);
+    tail.connect(filter);
+    filter.connect(gain);
+    gain.connect(a.master);
+
+    boom.start(now);
+    tail.start(now + 0.01);
+    boom.stop(now + 0.53);
+    tail.stop(now + 0.53);
+  }
+
+  function playCargoThudSound(intensity = 1) {
+    const a = game.audio;
+    if (!a) return;
+    const now = a.ctx.currentTime;
+    if (now - a.lastThudTime < 0.07) return;
+    a.lastThudTime = now;
+
+    const thud = a.ctx.createOscillator();
+    thud.type = 'triangle';
+    thud.frequency.setValueAtTime(82 + 10 * intensity, now);
+    thud.frequency.exponentialRampToValueAtTime(42, now + 0.12);
+
+    const gain = a.ctx.createGain();
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(0.06 + Math.min(0.09, 0.03 * intensity), now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.17);
+
+    const filter = a.ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(460, now);
+
+    thud.connect(filter);
+    filter.connect(gain);
+    gain.connect(a.master);
+
+    thud.start(now);
+    thud.stop(now + 0.18);
   }
 
   function updateAudio() {
@@ -679,6 +857,20 @@
     a.hydroGain.gain.setTargetAtTime(targetHydro, t, 0.02);
     a.hydro.frequency.setTargetAtTime(180 + Math.abs(Math.sin(t * 18)) * 180, t, 0.015);
 
+    const trackModeActive = playing && ship.tracksDeploy > 0.55;
+    const trackSpeed = Math.abs(ship.vx);
+    // Low V8-style bed with lumpy-cam style idle pulse.
+    const lumpy = 0.6 + 0.4 * Math.sin(t * 17) * Math.sin(t * 7.5);
+    const idleBase = 28;
+    const driveAdd = Math.min(38, trackSpeed * 22);
+    const mainFreq = idleBase + driveAdd + lumpy * 2.2;
+    const subFreq = Math.max(18, mainFreq * 0.62 + Math.sin(t * 9.5) * 1.2);
+    const targetTrackGain = trackModeActive ? (0.045 + Math.min(0.16, trackSpeed * 0.12) + lumpy * 0.01) : 0;
+    a.trackEngineGain.gain.setTargetAtTime(targetTrackGain, t, 0.045);
+    a.trackEngine.frequency.setTargetAtTime(mainFreq, t, 0.055);
+    a.trackEngineSub.frequency.setTargetAtTime(subFreq, t, 0.06);
+    a.trackEngineFilter.frequency.setTargetAtTime(trackModeActive ? (220 + Math.min(520, trackSpeed * 240) + lumpy * 45) : 180, t, 0.06);
+
     a.master.gain.setTargetAtTime(playing ? 0.24 : 0.1, t, 0.08);
   }
 
@@ -691,7 +883,8 @@
   game.camera.y = ship.y - 6;
 
   function getArmKinematics() {
-    const base = worldFromLocal(ship, shipShape.craneBase);
+    const baseLocal = { x: shipShape.craneBase.x, y: shipShape.craneBase.y + ship.armStowDrop * ARM_STOW_DROP_MAX };
+    const base = worldFromLocal(ship, baseLocal);
     const shipUpAngle = ship.angle - Math.PI / 2;
     const a0 = shipUpAngle + ship.baseAngle;
     const seg1Len = 2.14;
@@ -713,6 +906,8 @@
     ship.grabbedCargo = null;
     ship.bounceCount = 0;
     ship.settleLock = false;
+
+    playExplosionSound();
 
     for (let i = 0; i < 28; i++) {
       const a = Math.random() * Math.PI * 2;
@@ -768,6 +963,18 @@
     ship.gearExtended = false;
     ship.gearDeploy = 0;
     ship.gearSafetyTimer = 0;
+    ship.armFolded = false;
+    ship.armFoldBlend = 0;
+    ship.armStowDrop = 0;
+    const unfoldPose = getDefaultUnfoldedArmPose();
+    ship.armDeployPose.baseAngle = unfoldPose.baseAngle;
+    ship.armDeployPose.seg1Angle = unfoldPose.seg1Angle;
+    ship.armDeployPose.seg2Angle = unfoldPose.seg2Angle;
+    ship.armDeployPose.clawOpen = unfoldPose.clawOpen;
+    ship.baseAngle = unfoldPose.baseAngle;
+    ship.seg1Angle = unfoldPose.seg1Angle;
+    ship.seg2Angle = unfoldPose.seg2Angle;
+    ship.clawOpen = unfoldPose.clawOpen;
     setShipOnGround();
     game.camera.x = ship.x;
     game.camera.y = ship.y - 6;
@@ -795,14 +1002,21 @@
       ship.throttle = 0;
     }
 
-    if (keys.has('KeyK')) ship.baseAngle -= CONFIG.baseRate * dt;
-    if (keys.has('KeyL')) ship.baseAngle += CONFIG.baseRate * dt;
-    if (keys.has('KeyI')) ship.seg1Angle -= CONFIG.seg1Rate * dt;
-    if (keys.has('KeyO')) ship.seg1Angle += CONFIG.seg1Rate * dt;
-    if (keys.has('KeyN')) ship.seg2Angle -= CONFIG.seg2Rate * dt;
-    if (keys.has('KeyM')) ship.seg2Angle += CONFIG.seg2Rate * dt;
-    if (keys.has('Comma')) ship.clawOpen = clamp(ship.clawOpen - CONFIG.clawRate * dt, 0, 1);
-    if (keys.has('Period')) ship.clawOpen = clamp(ship.clawOpen + CONFIG.clawRate * dt, 0, 1);
+    const armControlLocked = ship.armFolded || ship.armFoldBlend > 0.02;
+    if (!armControlLocked) {
+      if (keys.has('KeyK')) ship.baseAngle -= CONFIG.baseRate * dt;
+      if (keys.has('KeyL')) ship.baseAngle += CONFIG.baseRate * dt;
+      if (keys.has('KeyI')) ship.seg1Angle -= CONFIG.seg1Rate * dt;
+      if (keys.has('KeyO')) ship.seg1Angle += CONFIG.seg1Rate * dt;
+      if (keys.has('KeyN')) ship.seg2Angle -= CONFIG.seg2Rate * dt;
+      if (keys.has('KeyM')) ship.seg2Angle += CONFIG.seg2Rate * dt;
+      if (keys.has('Comma')) ship.clawOpen = clamp(ship.clawOpen - CONFIG.clawRate * dt, 0, 1);
+      if (keys.has('Period')) ship.clawOpen = clamp(ship.clawOpen + CONFIG.clawRate * dt, 0, 1);
+      ship.armDeployPose.baseAngle = ship.baseAngle;
+      ship.armDeployPose.seg1Angle = ship.seg1Angle;
+      ship.armDeployPose.seg2Angle = ship.seg2Angle;
+      ship.armDeployPose.clawOpen = ship.clawOpen;
+    }
 
     ship.baseAngle = clamp(ship.baseAngle, -120 * Math.PI/180, 120 * Math.PI/180);
     // Segment joints are intentionally unbounded for full 360° continuous control.
@@ -847,6 +1061,27 @@
     if (ship.landed && recyclePadUnderShip) {
       ship.invincibleTimer = Math.max(ship.invincibleTimer, 0.2);
     }
+
+    ship.armFoldBlend = moveTowards(ship.armFoldBlend, ship.armFolded ? 1 : 0, dt / CONFIG.armFoldDurationSec);
+    const verticalPose = {
+      // Step 1: raise arm to an upright vertical pose.
+      baseAngle: 0,
+      seg1Angle: Math.PI / 2,
+      seg2Angle: Math.PI / 2,
+      clawOpen: 0.18,
+    };
+    // Step 2: keep the arm vertical and lower it straight down into the ship.
+    const lowerStart = 0.72;
+    const lowerT = clamp((ship.armFoldBlend - lowerStart) / (1 - lowerStart), 0, 1);
+    ship.armStowDrop = lowerT * ARM_STOW_DROP_MAX;
+    if (ship.armFolded || ship.armFoldBlend > 0.001) {
+      const tFoldUp = clamp(ship.armFoldBlend / lowerStart, 0, 1);
+      ship.baseAngle = lerp(ship.armDeployPose.baseAngle, verticalPose.baseAngle, tFoldUp);
+      ship.seg1Angle = lerp(ship.armDeployPose.seg1Angle, verticalPose.seg1Angle, tFoldUp);
+      ship.seg2Angle = lerp(ship.armDeployPose.seg2Angle, verticalPose.seg2Angle, tFoldUp);
+      ship.clawOpen = lerp(ship.armDeployPose.clawOpen, verticalPose.clawOpen, tFoldUp);
+    }
+
     const trayTarget = ship.trayExtended ? 1 : 0;
     ship.traySlide = lerp(ship.traySlide, trayTarget, clamp(8 * dt, 0, 1));
     const mass = shipMass();
@@ -910,7 +1145,7 @@
 
     if (ship.invincibleTimer <= 0) {
       for (const c of cargos) {
-        if (c.scored || c.accepting || c.stored || c.grabbed || c.popping) continue;
+        if (c.scored || c.accepting || c.stored || c.grabbed || c.popping || c.ignoreTrayTimer > 0) continue;
         if (Math.hypot(c.x - hullCenter.x, c.y - hullCenter.y) < c.r + shipShape.hullRadius * (0.8 / CONFIG.impactRobustness)) {
           return crashShip('hull-cargo');
         }
@@ -1062,6 +1297,7 @@
 
   function updateCargo(dt) {
     const arm = getArmKinematics();
+    const armDormant = ship.armFolded || ship.armFoldBlend >= 0.72;
 
     if (ship.grabbedCargo) {
       const c = cargos.find(k => k.id === ship.grabbedCargo);
@@ -1074,13 +1310,13 @@
         c.vy = ship.vy;
       }
 
-      if (ship.clawOpen > 0.82) {
+      if (ship.clawOpen > 0.82 || armDormant) {
         if (c) c.grabbed = false;
         ship.grabbedCargo = null;
       }
     } else {
       // Pick when claw is mostly closed and target near tip.
-      if (ship.clawOpen < 0.2) {
+      if (!armDormant && ship.clawOpen < 0.2) {
         let pick = null;
         let best = 0.45;
         for (const c of cargos) {
@@ -1143,7 +1379,9 @@
       }
       const gy = terrainY(c.x) - c.r;
       if (c.y > gy) {
+        const impactV = Math.abs(c.vy);
         c.y = gy;
+        if (impactV > 0.52) playCargoThudSound(clamp(impactV * 0.55, 0.6, 3));
         if (Math.abs(c.vy) > 0.3) c.vy *= -0.22;
         else c.vy = 0;
         c.vx *= 0.88;
@@ -1161,6 +1399,26 @@
       else c.restTimer = 0;
     }
 
+    function trayHasCapacity() {
+      return ship.storedCargoIds.length < CONFIG.trayCapacity;
+    }
+
+    function bounceCargoOffTrayTop(c, tr) {
+      const bounceLocal = {
+        x: tr.x - c.r - 0.09,
+        y: tr.y - c.r - 0.04,
+      };
+      const bounceWorld = worldFromLocal(ship, bounceLocal);
+      c.x = bounceWorld.x;
+      c.y = bounceWorld.y;
+      const left = rotate({ x: -1, y: 0 }, ship.angle);
+      const up = rotate({ x: 0, y: -1 }, ship.angle);
+      c.vx = ship.vx + left.x * (1.5 + Math.random() * 0.8) + up.x * 0.35;
+      c.vy = ship.vy + left.y * (1.5 + Math.random() * 0.8) + up.y * 0.95;
+      c.ignoreTrayTimer = 0.9;
+      c.restTimer = 0;
+    }
+
     // Tray catch: dropped/free cargo that enters tray bounds is caught and stored.
     if (ship.traySlide > 0.55) for (const c of cargos) {
       if (c.scored || c.accepting || c.stored || c.grabbed || c.popping || c.ignoreTrayTimer > 0) continue;
@@ -1168,6 +1426,10 @@
       const tr = getTrayRect();
       const inTray = local.x > tr.x + c.r && local.x < tr.x + tr.w - c.r && local.y > tr.y + c.r && local.y < tr.y + tr.h - c.r;
       if (!inTray) continue;
+      if (!trayHasCapacity()) {
+        bounceCargoOffTrayTop(c, tr);
+        continue;
+      }
       c.stored = true;
       c.vx = ship.vx;
       c.vy = ship.vy;
@@ -1187,13 +1449,19 @@
         const inTray = local.x > tr.x && local.x < tr.x + tr.w && local.y > tr.y && local.y < tr.y + tr.h;
         const slow = Math.hypot(ship.vx, ship.vy) < 1.0;
         if (inTray && (ship.landed || slow)) {
-          c.grabbed = false;
-          c.stored = true;
-          c.localPos = { x: clamp(local.x, tr.x + c.r, tr.x + tr.w - c.r), y: clamp(local.y, tr.y + c.r, tr.y + tr.h - c.r) };
-          ship.grabbedCargo = null;
-          if (!ship.storedCargoIds.includes(c.id)) {
-            ship.storedCargoIds.push(c.id);
-            ship.cargoMass += c.mass;
+          if (!trayHasCapacity()) {
+            c.grabbed = false;
+            ship.grabbedCargo = null;
+            bounceCargoOffTrayTop(c, tr);
+          } else {
+            c.grabbed = false;
+            c.stored = true;
+            c.localPos = { x: clamp(local.x, tr.x + c.r, tr.x + tr.w - c.r), y: clamp(local.y, tr.y + c.r, tr.y + tr.h - c.r) };
+            ship.grabbedCargo = null;
+            if (!ship.storedCargoIds.includes(c.id)) {
+              ship.storedCargoIds.push(c.id);
+              ship.cargoMass += c.mass;
+            }
           }
         }
       }
@@ -1328,6 +1596,82 @@
   function drawBackground() {
     ctx.fillStyle = '#02030b';
     ctx.fillRect(0, 0, W, H);
+
+    // Animated background set pieces: floating ISS and decorative UFOs (visual only, non-interactive).
+    const bgTime = performance.now() * 0.001;
+    const shipDiameterPx = shipShape.hullRadius * CONFIG.METER_TO_PX * 2;
+
+    const issScale = Math.max(0.8, Math.min(1.25, shipDiameterPx / 50));
+    const issAnchorX = W * 0.57 - game.camera.x * 0.065 * CONFIG.METER_TO_PX;
+    const issAnchorY = H * 0.1 - game.camera.y * 0.03 * CONFIG.METER_TO_PX;
+    const issX = issAnchorX + Math.sin(bgTime * 0.17) * Math.min(42, W * 0.035) + Math.sin(bgTime * 0.071 + 1.4) * 14;
+    const issY = issAnchorY + Math.cos(bgTime * 0.13 + 0.8) * Math.min(20, H * 0.025) + Math.sin(bgTime * 0.23) * 6;
+    ctx.save();
+    ctx.translate(issX, issY);
+    ctx.rotate(Math.sin(bgTime * 0.2) * 0.06 - 0.08);
+    ctx.globalAlpha = 0.88;
+    ctx.fillStyle = '#9fb0c7';
+    ctx.fillRect(-8 * issScale, -3 * issScale, 16 * issScale, 6 * issScale);
+    ctx.fillStyle = '#6d7f98';
+    ctx.fillRect(-4 * issScale, -7 * issScale, 8 * issScale, 14 * issScale);
+    ctx.fillStyle = '#4f7cc5';
+    const panelW = 10 * issScale;
+    const panelH = 33 * issScale;
+    const panelGap = 1.8 * issScale;
+    for (let i = 0; i < 4; i++) {
+      const leftX = (-54 * issScale) + i * (panelW + panelGap);
+      const rightX = (13 * issScale) + i * (panelW + panelGap);
+      ctx.fillRect(leftX, -16.5 * issScale, panelW, panelH);
+      ctx.fillRect(rightX, -16.5 * issScale, panelW, panelH);
+    }
+    ctx.strokeStyle = '#b9d5ff';
+    ctx.lineWidth = 1.1;
+    for (let i = 0; i < 4; i++) {
+      const leftX = (-54 * issScale) + i * (panelW + panelGap);
+      const rightX = (13 * issScale) + i * (panelW + panelGap);
+      ctx.strokeRect(leftX, -16.5 * issScale, panelW, panelH);
+      ctx.strokeRect(rightX, -16.5 * issScale, panelW, panelH);
+    }
+    ctx.restore();
+
+    const ufoBaseScale = Math.max(0.76, Math.min(1.12, shipDiameterPx / 58));
+    for (let i = 0; i < 4; i++) {
+      const anchorX = W * (0.13 + i * 0.22) - game.camera.x * CONFIG.METER_TO_PX * (0.035 + i * 0.004);
+      const anchorY = H * (0.16 + (i % 2) * 0.12 + i * 0.04) - game.camera.y * CONFIG.METER_TO_PX * 0.018;
+      const bobX = Math.sin(bgTime * (0.11 + i * 0.02) + i * 1.7) * (24 + i * 8);
+      const bobY = Math.cos(bgTime * (0.16 + i * 0.018) + i * 0.9) * (9 + i * 2.7);
+      const x = anchorX + bobX;
+      const y = anchorY + bobY;
+      const scale = ufoBaseScale * (0.76 + (i % 3) * 0.17);
+
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(Math.sin(bgTime * (0.45 + i * 0.07) + i) * 0.03);
+      ctx.globalAlpha = 0.66;
+      ctx.fillStyle = '#89f4ff';
+      ctx.beginPath();
+      ctx.ellipse(0, -2.4 * scale, 4.8 * scale, 2.2 * scale, 0, Math.PI, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#a8b6d6';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 10.5 * scale, 3.3 * scale, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#dde6ff';
+      ctx.beginPath();
+      ctx.arc(-3.8 * scale, 0.2 * scale, 0.9 * scale, 0, Math.PI * 2);
+      ctx.arc(0, 0.2 * scale, 0.9 * scale, 0, Math.PI * 2);
+      ctx.arc(3.8 * scale, 0.2 * scale, 0.9 * scale, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 0.22;
+      ctx.fillStyle = '#8cf5ff';
+      ctx.beginPath();
+      ctx.moveTo(-1.8 * scale, 2.1 * scale);
+      ctx.lineTo(0, 9.8 * scale);
+      ctx.lineTo(1.8 * scale, 2.1 * scale);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
 
     for (const p of planets) {
       const px = (p.x - game.camera.x * 0.08) * CONFIG.METER_TO_PX + W / 2;
@@ -1552,6 +1896,15 @@
     ctx.fillRect(tr.x * m, trayVisualY * m, trayEdgeW, trayVisualH * m);
     ctx.fillRect((tr.x + trayVisualW) * m - trayEdgeW, trayVisualY * m, trayEdgeW, trayVisualH * m);
 
+    if (ship.traySlide > 0.2) {
+      ctx.fillStyle = '#000000';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = `700 ${Math.max(10, Math.floor(0.21 * m))}px "Segoe UI", Arial, sans-serif`;
+      const trayLabelX = (tr.x + trayVisualW * 0.5) * m - ctx.measureText('  ').width;
+      ctx.fillText('CARGO', trayLabelX, (trayVisualY + trayVisualH * 0.5) * m);
+    }
+
     // Landing gear feet + support arms
     const supportLocals = getSupportLocals();
     const footL = supportLocals.left;
@@ -1667,80 +2020,100 @@
     }
 
     // Crane segments
-    const base = shipShape.craneBase;
-    const bAng = -Math.PI / 2 + ship.baseAngle;
-    const seg1Len = 2.14;
-    const seg2Len = 1.91;
-    const p1 = { x: base.x + Math.cos(bAng) * seg1Len, y: base.y + Math.sin(bAng) * seg1Len };
-    const a1 = bAng + (ship.seg1Angle - Math.PI / 2);
-    const p2 = { x: p1.x + Math.cos(a1) * seg2Len, y: p1.y + Math.sin(a1) * seg2Len };
-    const a2 = a1 + (ship.seg2Angle - Math.PI / 2);
+    if (ship.armFolded && ship.armFoldBlend > 0.995) {
+      // Fully stowed inside the ship bay.
+      ctx.restore();
+      return;
+    }
+    const base = { x: shipShape.craneBase.x, y: shipShape.craneBase.y + ship.armStowDrop * ARM_STOW_DROP_MAX };
 
-    const armThickness = 6.4;
-    const jointDiameter = armThickness * 1.3;
-    const jointRadiusPx = jointDiameter * 0.5 * 1.3;
-    const innerJointRadiusPx = jointRadiusPx * 0.5;
+    // While retracting into the ship, clip arm rendering above the bay lip so it reads as stowing inside.
+    const loweringIntoShip = ship.armFoldBlend >= 0.72;
+    if (loweringIntoShip) {
+      ctx.save();
+      ctx.beginPath();
+      // Keep the whole upper arm visible while still hiding anything that drops below the bay lip.
+      ctx.rect(-5.8 * m, -8.2 * m, 11.6 * m, (shipShape.craneBase.y - 0.02) * m + 8.2 * m);
+      ctx.clip();
+    }
 
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = armThickness;
-    ctx.beginPath();
-    ctx.moveTo(base.x * m, base.y * m);
-    ctx.lineTo(p1.x * m, p1.y * m);
-    ctx.lineTo(p2.x * m, p2.y * m);
-    ctx.stroke();
+    {
+      const bAng = -Math.PI / 2 + ship.baseAngle;
+      const seg1Len = 2.14;
+      const seg2Len = 1.91;
+      const p1 = { x: base.x + Math.cos(bAng) * seg1Len, y: base.y + Math.sin(bAng) * seg1Len };
+      const a1 = bAng + (ship.seg1Angle - Math.PI / 2);
+      const p2 = { x: p1.x + Math.cos(a1) * seg2Len, y: p1.y + Math.sin(a1) * seg2Len };
+      const a2 = a1 + (ship.seg2Angle - Math.PI / 2);
 
-    // Claw (single-color white, fully connected to arm by a rectangular coupler)
-    const open = lerp(0.03, 0.42, ship.clawOpen);
-    const tip = { x: p2.x + Math.cos(a2) * 0.26, y: p2.y + Math.sin(a2) * 0.26 };
-    const n = { x: Math.cos(a2 + Math.PI / 2), y: Math.sin(a2 + Math.PI / 2) };
-    const forward = { x: Math.cos(a2), y: Math.sin(a2) };
+      const armThickness = 6.4;
+      const jointDiameter = armThickness * 1.3;
+      const jointRadiusPx = jointDiameter * 0.5 * 1.3;
+      const innerJointRadiusPx = jointRadiusPx * 0.5;
 
-    // Rectangular connector to remove visual gap from arm to claw fingers.
-    const couplerLen = 0.22;
-    const couplerHalfW = 0.08;
-    const c0 = { x: p2.x - n.x * couplerHalfW, y: p2.y - n.y * couplerHalfW };
-    const c1 = { x: p2.x + n.x * couplerHalfW, y: p2.y + n.y * couplerHalfW };
-    const c2 = { x: p2.x + forward.x * couplerLen + n.x * couplerHalfW, y: p2.y + forward.y * couplerLen + n.y * couplerHalfW };
-    const c3 = { x: p2.x + forward.x * couplerLen - n.x * couplerHalfW, y: p2.y + forward.y * couplerLen - n.y * couplerHalfW };
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.moveTo(c0.x * m, c0.y * m);
-    ctx.lineTo(c1.x * m, c1.y * m);
-    ctx.lineTo(c2.x * m, c2.y * m);
-    ctx.lineTo(c3.x * m, c3.y * m);
-    ctx.closePath();
-    ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = armThickness;
+      ctx.beginPath();
+      ctx.moveTo(base.x * m, base.y * m);
+      ctx.lineTo(p1.x * m, p1.y * m);
+      ctx.lineTo(p2.x * m, p2.y * m);
+      ctx.stroke();
 
-    function drawFinger(sign) {
-      const root = { x: tip.x + n.x * open * sign, y: tip.y + n.y * open * sign };
-      const pA = { x: root.x + forward.x * 0.44, y: root.y + forward.y * 0.44 };
-      const pB = { x: root.x + n.x * 0.24 * sign, y: root.y + n.y * 0.24 * sign };
+      // Claw (single-color white, fully connected to arm by a rectangular coupler)
+      const open = lerp(0.03, 0.42, ship.clawOpen);
+      const tip = { x: p2.x + Math.cos(a2) * 0.26, y: p2.y + Math.sin(a2) * 0.26 };
+      const n = { x: Math.cos(a2 + Math.PI / 2), y: Math.sin(a2 + Math.PI / 2) };
+      const forward = { x: Math.cos(a2), y: Math.sin(a2) };
+
+      // Rectangular connector to remove visual gap from arm to claw fingers.
+      const couplerLen = 0.22;
+      const couplerHalfW = 0.08;
+      const c0 = { x: p2.x - n.x * couplerHalfW, y: p2.y - n.y * couplerHalfW };
+      const c1 = { x: p2.x + n.x * couplerHalfW, y: p2.y + n.y * couplerHalfW };
+      const c2 = { x: p2.x + forward.x * couplerLen + n.x * couplerHalfW, y: p2.y + forward.y * couplerLen + n.y * couplerHalfW };
+      const c3 = { x: p2.x + forward.x * couplerLen - n.x * couplerHalfW, y: p2.y + forward.y * couplerLen - n.y * couplerHalfW };
       ctx.fillStyle = '#ffffff';
       ctx.beginPath();
-      ctx.moveTo(root.x * m, root.y * m);
-      ctx.lineTo(pA.x * m, pA.y * m);
-      ctx.lineTo(pB.x * m, pB.y * m);
+      ctx.moveTo(c0.x * m, c0.y * m);
+      ctx.lineTo(c1.x * m, c1.y * m);
+      ctx.lineTo(c2.x * m, c2.y * m);
+      ctx.lineTo(c3.x * m, c3.y * m);
       ctx.closePath();
       ctx.fill();
-    }
-    drawFinger(1);
-    drawFinger(-1);
 
-    // Joint circles for arm joints (30% larger than previous size).
-    function drawJoint(localPoint) {
-      ctx.fillStyle = '#ff2f2f';
-      ctx.beginPath();
-      ctx.arc(localPoint.x * m, localPoint.y * m, jointRadiusPx, 0, Math.PI * 2);
-      ctx.fill();
+      function drawFinger(sign) {
+        const root = { x: tip.x + n.x * open * sign, y: tip.y + n.y * open * sign };
+        const pA = { x: root.x + forward.x * 0.44, y: root.y + forward.y * 0.44 };
+        const pB = { x: root.x + n.x * 0.24 * sign, y: root.y + n.y * 0.24 * sign };
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.moveTo(root.x * m, root.y * m);
+        ctx.lineTo(pA.x * m, pA.y * m);
+        ctx.lineTo(pB.x * m, pB.y * m);
+        ctx.closePath();
+        ctx.fill();
+      }
+      drawFinger(1);
+      drawFinger(-1);
 
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(localPoint.x * m, localPoint.y * m, innerJointRadiusPx, 0, Math.PI * 2);
-      ctx.fill();
+      // Joint circles for arm joints (30% larger than previous size).
+      function drawJoint(localPoint) {
+        ctx.fillStyle = '#ff2f2f';
+        ctx.beginPath();
+        ctx.arc(localPoint.x * m, localPoint.y * m, jointRadiusPx, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(localPoint.x * m, localPoint.y * m, innerJointRadiusPx, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      drawJoint(base);
+      drawJoint(p1);
+      drawJoint(p2);
     }
-    drawJoint(base);
-    drawJoint(p1);
-    drawJoint(p2);
+
+    if (loweringIntoShip) ctx.restore();
 
     ctx.restore();
   }
@@ -1777,10 +2150,12 @@
     ctx.lineTo(W, y + 1);
     ctx.stroke();
 
-    const pad = 16;
-    const gap = 12;
-    const panelH = h - 24;
-    const panelY = y + 12;
+    const innerW = W - 32;
+    const uiScale = clamp(innerW / 1750, 0.56, 1);
+    const pad = Math.floor(16 * uiScale);
+    const gap = Math.max(6, Math.floor(12 * uiScale));
+    const panelH = h - Math.max(12, Math.floor(24 * uiScale));
+    const panelY = y + Math.max(6, Math.floor(12 * uiScale));
 
     function drawBar(x, w, label, value, unit = '%') {
       ctx.fillStyle = '#000';
@@ -1791,20 +2166,19 @@
       const fillW = Math.max(0, Math.min(1, value)) * (w - 18);
       ctx.fillRect(x + 9, panelY + panelH * 0.55, fillW, panelH * 0.28);
       ctx.fillStyle = '#7dff9c';
-      ctx.font = 'bold 14px Segoe UI';
-      ctx.fillText(label, x + 10, panelY + 20);
-      ctx.font = 'bold 18px Consolas, monospace';
-      ctx.fillText(`${Math.round(value * 100)}${unit}`, x + 10, panelY + 44);
+      ctx.font = `bold ${Math.max(10, Math.floor(14 * uiScale))}px Segoe UI`;
+      ctx.fillText(label, x + 8, panelY + Math.max(14, Math.floor(20 * uiScale)));
+      ctx.font = `bold ${Math.max(11, Math.floor(18 * uiScale))}px Consolas, monospace`;
+      ctx.fillText(`${Math.round(value * 100)}${unit}`, x + 8, panelY + Math.max(30, Math.floor(44 * uiScale)));
     }
 
-    const innerW = W - pad * 2;
-    const barW = Math.max(160, Math.min(280, innerW * 0.18));
+    const barW = clamp(innerW * 0.16, 92 * uiScale, 250 * uiScale);
     const fuelX = pad + barW + gap;
     drawBar(pad, barW, 'THROTTLE', ship.throttle);
     drawBar(fuelX, barW, 'FUEL', ship.fuel / 100);
 
-    const gaugeSize = Math.min(panelH - 10, 110);
-    const attitudePanelW = gaugeSize + 32;
+    const gaugeSize = clamp(Math.min(panelH - 8, 110 * uiScale), 44 * uiScale, 110 * uiScale);
+    const attitudePanelW = gaugeSize + Math.max(20, Math.floor(32 * uiScale));
     const attitudeX = fuelX + barW + gap;
     const gx = attitudeX + attitudePanelW / 2;
     const gy = panelY + panelH / 2 + 10;
@@ -1827,18 +2201,139 @@
     ctx.stroke();
     ctx.restore();
     ctx.fillStyle = '#7dff9c';
-    ctx.font = 'bold 13px Segoe UI';
+    ctx.font = `bold ${Math.max(10, Math.floor(13 * uiScale))}px Segoe UI`;
     ctx.fillText('ATTITUDE', gx - 30, panelY + 16);
 
-    const dX = attitudeX + attitudePanelW + gap;
-    const totalW = Math.max(420, W - dX - pad);
-    const scoreW = Math.min(220, Math.max(150, totalW * 0.23));
+    const speedW = clamp(innerW * 0.125, 95 * uiScale, 180 * uiScale);
+    const speedX = attitudeX + attitudePanelW + gap;
+    const sgx = speedX + speedW * 0.5;
+    const sgy = panelY + panelH * 0.68;
+    const speedMps = Math.hypot(ship.vx, ship.vy);
+    const speedMax = 12;
+    const safeLandingSpeed = CONFIG.landingMaxSpeed;
+    const speedNorm = clamp(speedMps / speedMax, 0, 1);
+    const safeNorm = clamp(safeLandingSpeed / speedMax, 0, 1);
+    const redNorm = 0.84;
+    const speedStartAng = Math.PI * (7 / 6); // 7 o'clock
+    const speedEndAng = Math.PI * (11 / 6); // sweep clockwise toward top-right
+    const safeAng = lerp(speedStartAng, speedEndAng, safeNorm);
+    const redStartAng = lerp(speedStartAng, speedEndAng, redNorm);
+    const speedAng = lerp(speedStartAng, speedEndAng, speedNorm);
+
+    ctx.fillStyle = '#000';
+    ctx.fillRect(speedX, panelY, speedW, panelH);
+    ctx.strokeStyle = '#0b5';
+    ctx.strokeRect(speedX, panelY, speedW, panelH);
+
+    const speedRadius = gaugeSize * 0.36;
+    // Safe landing band at low speed.
+    ctx.strokeStyle = '#ffb347';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(sgx, sgy, speedRadius, speedStartAng, safeAng, false);
+    ctx.stroke();
+    // Normal operating speed range.
+    ctx.strokeStyle = '#42d76d';
+    ctx.beginPath();
+    ctx.arc(sgx, sgy, speedRadius, safeAng, redStartAng, false);
+    ctx.stroke();
+    // Top-end danger speed range.
+    ctx.strokeStyle = '#ff6464';
+    ctx.beginPath();
+    ctx.arc(sgx, sgy, speedRadius, redStartAng, speedEndAng, false);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#7dff9c';
+    ctx.lineWidth = 2;
+    for (let i = 0; i <= 6; i++) {
+      const t = i / 6;
+      const a = lerp(speedStartAng, speedEndAng, t);
+      const rOuter = speedRadius;
+      const rInner = rOuter - gaugeSize * 0.055;
+      ctx.beginPath();
+      ctx.moveTo(sgx + Math.cos(a) * rInner, sgy + Math.sin(a) * rInner);
+      ctx.lineTo(sgx + Math.cos(a) * rOuter, sgy + Math.sin(a) * rOuter);
+      ctx.stroke();
+    }
+
+    ctx.save();
+    ctx.translate(sgx, sgy);
+    ctx.rotate(speedAng);
+    ctx.strokeStyle = '#9ce8ff';
+    ctx.lineWidth = 2.6;
+    ctx.beginPath();
+    ctx.moveTo(-gaugeSize * 0.04, 0);
+    ctx.lineTo(gaugeSize * 0.28, 0);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.fillStyle = '#7dff9c';
+    ctx.font = `bold ${Math.max(10, Math.floor(13 * uiScale))}px Segoe UI`;
+    ctx.fillText('SPEED', speedX + 10, panelY + 16);
+    ctx.font = `bold ${Math.max(10, Math.floor(14 * uiScale))}px "Consolas", monospace`;
+    ctx.fillText(`${speedMps.toFixed(1)} m/s`, speedX + 10, panelY + panelH - 10);
+
+    const weightW = clamp(innerW * 0.125, 98 * uiScale, 182 * uiScale);
+    const weightX = speedX + speedW + gap;
+    const wgx = weightX + weightW * 0.5;
+    const wgy = panelY + panelH * 0.68;
+    const maxCargoMass = CONFIG.trayCapacity * Math.max(...cargoTypes.map((t) => t.mass));
+    const cargoCount = ship.storedCargoIds.length;
+    const cargoCountNorm = clamp(cargoCount / CONFIG.trayCapacity, 0, 1);
+    const cargoMassNorm = clamp(ship.cargoMass / Math.max(0.001, maxCargoMass), 0, 1);
+    const weightNorm = clamp(Math.max(cargoCountNorm, cargoMassNorm), 0, 1);
+    const weightStartAng = Math.PI * (7 / 6);
+    const weightEndAng = Math.PI * (11 / 6);
+    const weightAng = lerp(weightStartAng, weightEndAng, weightNorm);
+
+    ctx.fillStyle = '#000';
+    ctx.fillRect(weightX, panelY, weightW, panelH);
+    ctx.strokeStyle = '#0b5';
+    ctx.strokeRect(weightX, panelY, weightW, panelH);
+    ctx.strokeStyle = '#7dff9c';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(wgx, wgy, gaugeSize * 0.34, weightStartAng, weightEndAng, false);
+    ctx.stroke();
+
+    for (let i = 0; i <= CONFIG.trayCapacity; i++) {
+      const t = i / CONFIG.trayCapacity;
+      const a = lerp(weightStartAng, weightEndAng, t);
+      const rOuter = gaugeSize * 0.34;
+      const rInner = rOuter - gaugeSize * 0.05;
+      ctx.beginPath();
+      ctx.moveTo(wgx + Math.cos(a) * rInner, wgy + Math.sin(a) * rInner);
+      ctx.lineTo(wgx + Math.cos(a) * rOuter, wgy + Math.sin(a) * rOuter);
+      ctx.stroke();
+    }
+
+    ctx.save();
+    ctx.translate(wgx, wgy);
+    ctx.rotate(weightAng);
+    ctx.strokeStyle = '#ffd18b';
+    ctx.lineWidth = 2.6;
+    ctx.beginPath();
+    ctx.moveTo(-gaugeSize * 0.04, 0);
+    ctx.lineTo(gaugeSize * 0.26, 0);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.fillStyle = '#7dff9c';
+    ctx.font = `bold ${Math.max(10, Math.floor(13 * uiScale))}px Segoe UI`;
+    ctx.fillText('WEIGHT', weightX + 10, panelY + 16);
+    ctx.font = `bold ${Math.max(10, Math.floor(14 * uiScale))}px "Consolas", monospace`;
+    ctx.fillText(`${shipMass().toFixed(2)} t`, weightX + 10, panelY + panelH - 24);
+    ctx.fillText(`CARGO ${cargoCount}/${CONFIG.trayCapacity}`, weightX + 10, panelY + panelH - 8);
+
+    const dX = weightX + weightW + gap;
+    const totalW = Math.max(220 * uiScale, W - dX - pad);
+    const scoreW = Math.min(200 * uiScale, Math.max(98 * uiScale, totalW * 0.23));
 
     // 50% wider mini-map target than the original design.
-    const targetMapW = clamp(Math.floor(W * 0.33), 270, 420);
-    const minDistW = 180;
-    const maxMapW = Math.max(150, totalW - scoreW - gap * 2 - minDistW);
-    const mapW = Math.max(150, Math.min(targetMapW, maxMapW));
+    const targetMapW = clamp(Math.floor(W * 0.3), 150 * uiScale, 360 * uiScale);
+    const minDistW = 110 * uiScale;
+    const maxMapW = Math.max(95 * uiScale, totalW - scoreW - gap * 2 - minDistW);
+    const mapW = Math.max(95 * uiScale, Math.min(targetMapW, maxMapW));
     const distW = Math.max(minDistW, totalW - scoreW - mapW - gap * 2);
 
     ctx.fillStyle = '#000';
@@ -1847,9 +2342,9 @@
     ctx.strokeRect(dX, panelY, distW, panelH);
     const dist = distanceToGroundMeters();
     ctx.fillStyle = '#7dff9c';
-    ctx.font = 'bold 15px Segoe UI';
+    ctx.font = `bold ${Math.max(10, Math.floor(15 * uiScale))}px Segoe UI`;
     ctx.fillText('DISTANCE TO GROUND', dX + 12, panelY + 22);
-    ctx.font = 'bold 44px "Consolas", monospace';
+    ctx.font = `bold ${Math.max(16, Math.floor(44 * uiScale))}px "Consolas", monospace`;
     ctx.fillText(`${dist.toFixed(1)} m`, dX + 12, panelY + panelH * 0.72);
 
     const mapX = dX + distW + gap;
@@ -1861,9 +2356,9 @@
     ctx.strokeStyle = '#0b5';
     ctx.strokeRect(scoreX, panelY, scoreW, panelH);
     ctx.fillStyle = '#7dff9c';
-    ctx.font = 'bold 15px Segoe UI';
+    ctx.font = `bold ${Math.max(10, Math.floor(15 * uiScale))}px Segoe UI`;
     ctx.fillText('SCORE', scoreX + 12, panelY + 22);
-    ctx.font = 'bold 46px "Consolas", monospace';
+    ctx.font = `bold ${Math.max(18, Math.floor(46 * uiScale))}px "Consolas", monospace`;
     ctx.fillText(`${game.score}`, scoreX + 12, panelY + panelH * 0.74);
   }
 
@@ -1934,74 +2429,269 @@
   }
 
 
-  function drawLeftInfoPanel(title, lines) {
-    const panelW = Math.min(860, Math.max(420, Math.floor(W * 0.8)));
-    const panelH = Math.min(H - 36, Math.max(320, Math.floor(H * 0.8)));
+  function drawMissionHelpPanel() {
+    const baseScale = clamp(Math.min(W / 1600, H / 980), 0.52, 1.15);
+    const panelW = clamp(W * 0.92, 540, 1260);
+    const panelH = clamp(H * 0.9, 420, 880);
     const panelX = Math.floor((W - panelW) * 0.5);
     const panelY = Math.floor((H - panelH) * 0.5);
 
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = 'rgba(8,12,20,0.94)';
-    ctx.fillRect(panelX, panelY, panelW, panelH);
-    ctx.strokeStyle = '#2b2b2b';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(panelX, panelY, panelW, panelH);
-
-    const padX = panelX + 30;
-    const padY = panelY + 24;
-    const maxW = panelW - 60;
-    const nonEmpty = lines.filter(Boolean);
-
-    let bodySize = 26;
-    for (; bodySize >= 11; bodySize -= 1) {
-      const titleSize = Math.round(bodySize * 1.5);
-      const lineGap = Math.max(8, Math.round(bodySize * 0.52));
-      const rowH = Math.round(bodySize * 1.45);
-      const titleH = Math.round(titleSize * 1.12);
-      const totalRowsH = titleH + lineGap * 2 + lines.length * rowH;
-      const maxLine = nonEmpty.reduce((m, line) => {
-        ctx.font = `bold ${bodySize}px Segoe UI`;
-        return Math.max(m, ctx.measureText(line).width);
-      }, 0);
-      ctx.font = `bold ${titleSize}px Segoe UI`;
-      const titleW = ctx.measureText(title).width;
-      if (totalRowsH <= panelH - 34 && Math.max(maxLine, titleW) <= maxW) break;
+    let uiScale = baseScale;
+    for (let i = 0; i < 7; i++) {
+      const titleTry = Math.floor(clamp(44 * uiScale, 22, 56));
+      const subtitleTry = Math.floor(clamp(24 * uiScale, 15, 32));
+      const bodyTry = Math.floor(clamp(15 * uiScale, 10, 20));
+      const sectionTry = Math.floor(clamp(18 * uiScale, 12, 24));
+      const capHTry = Math.floor(clamp(36 * uiScale, 20, 44));
+      const lineHTry = Math.floor(clamp(bodyTry * 1.3, 13, 26));
+      const colPadTry = Math.floor(clamp(28 * uiScale, 12, 34));
+      const footerLinesTry = 2;
+      const estimatedStart = colPadTry + titleTry + subtitleTry + sectionTry * 3 + lineHTry * (3 + 4 + 4) + 90 * uiScale;
+      const availableForControls = panelH - colPadTry - (lineHTry * footerLinesTry) - estimatedStart;
+      const neededControls = 12 * (capHTry + Math.floor(clamp(8 * uiScale, 4, 9)));
+      if (neededControls <= availableForControls) break;
+      uiScale *= 0.9;
     }
 
-    const titleSize = Math.round(bodySize * 1.5);
-    const lineGap = Math.max(8, Math.round(bodySize * 0.52));
-    const rowH = Math.round(bodySize * 1.45);
+    const titleSize = Math.floor(clamp(44 * uiScale, 22, 56));
+    const subtitleSize = Math.floor(clamp(24 * uiScale, 15, 32));
+    const bodySize = Math.floor(clamp(15 * uiScale, 10, 20));
+    const sectionSize = Math.floor(clamp(18 * uiScale, 12, 24));
+    const keyFont = Math.floor(clamp(14 * uiScale, 9, 19));
 
-    ctx.save();
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
+    const controls = [
+      { keys: ['A', 'D'], text: 'Rotate the ship left or right while flying.' },
+      { keys: ['W', 'S'], text: 'Increase or decrease engine throttle.' },
+      { keys: ['SPACE'], text: 'Start mission, then open or close the cargo tray.' },
+      { keys: ['K', 'L'], text: 'Rotate the arm base counterclockwise / clockwise.' },
+      { keys: ['I', 'O'], text: 'Move arm segment 1 up / down.' },
+      { keys: ['N', 'M'], text: 'Move arm segment 2 up / down.' },
+      { keys: [',', '.'], text: 'Close or open the claw to grab cargo.' },
+      { keys: ['F'], text: 'Fold arm down for flight / unfold arm for cargo use.' },
+      { keys: ['E'], text: 'Extend or retract landing gear (2-second movement).' },
+      { keys: ['Q'], text: 'Toggle track mode when landed and stable.' },
+      { keys: ['H'], text: 'Show/hide this help panel.' },
+      { keys: ['ESC'], text: 'Pause/unpause.' },
+    ];
 
-    const centerX = panelX + panelW * 0.5;
-    let y = padY + Math.round(titleSize * 0.6);
+    const storyBlurb = [
+      'Trash Bugs keep dumping junk across the lunar surface, and every new wave makes the Moon a little messier.',
+      'You are the pilot of Space Recycle Hero, hauling debris before the bugs bury the outposts in scrap.',
+      'Grab cargo, sort it, and keep your landings steady to save the Moon one load at a time.',
+    ];
 
-    ctx.fillStyle = '#ffffff';
-    ctx.font = `bold ${titleSize}px Segoe UI`;
-    ctx.fillText(title, centerX, y);
+    const howToPlay = [
+      'Collect trash pieces with the arm and claw.',
+      'Deliver cargo to recycle pads to score points.',
+      'Refuel at refuel pads to stay in the mission.',
+      'Land gently on skids for stability.',
+    ];
 
-    y += lineGap;
-    ctx.strokeStyle = '#34506e';
+    const tips = [
+      'Keep the tray closed in rough movement so cargo does not spill.',
+      'Soft touchdowns prevent crashes and give you cleaner pickups.',
+      'Use track mode when landed and stable for precise ground movement.',
+      'If your tray is full, offload before collecting more debris.',
+    ];
+
+    function roundedRectPath(x, y, w, h, r) {
+      const rr = Math.min(r, w * 0.5, h * 0.5);
+      ctx.beginPath();
+      ctx.moveTo(x + rr, y);
+      ctx.arcTo(x + w, y, x + w, y + h, rr);
+      ctx.arcTo(x + w, y + h, x, y + h, rr);
+      ctx.arcTo(x, y + h, x, y, rr);
+      ctx.arcTo(x, y, x + w, y, rr);
+      ctx.closePath();
+    }
+
+    function getWrappedLines(text, maxW, font = `500 ${bodySize}px Segoe UI`) {
+      ctx.font = font;
+      const words = text.split(' ');
+      const lines = [];
+      let line = '';
+      for (const w of words) {
+        const probe = line ? `${line} ${w}` : w;
+        if (ctx.measureText(probe).width > maxW && line) {
+          lines.push(line);
+          line = w;
+        } else line = probe;
+      }
+      if (line) lines.push(line);
+      return lines;
+    }
+
+    function drawWrappedText(text, x, y, maxW, lineH, color = '#d9e7f8', font = `500 ${bodySize}px Segoe UI`, align = 'left') {
+      const lines = getWrappedLines(text, maxW, font);
+      ctx.font = font;
+      ctx.fillStyle = color;
+
+      let yy = y;
+      if (align === 'right') {
+        ctx.textAlign = 'right';
+        for (const ln of lines) {
+          ctx.fillText(ln, x + maxW, yy);
+          yy += lineH;
+        }
+      } else {
+        ctx.textAlign = 'left';
+        for (const ln of lines) {
+          ctx.fillText(ln, x, yy);
+          yy += lineH;
+        }
+      }
+      return yy;
+    }
+
+    function drawKeycaps(keys, x, y) {
+      const capH = Math.floor(clamp(36 * uiScale, 22, 46));
+      const padX = Math.floor(clamp(14 * uiScale, 8, 16));
+      const radius = Math.floor(clamp(10 * uiScale, 6, 12));
+      const sepW = Math.floor(clamp(24 * uiScale, 14, 30));
+      let cx = x;
+      for (let i = 0; i < keys.length; i++) {
+        const k = keys[i];
+        ctx.font = `700 ${keyFont}px Segoe UI`;
+        const capW = Math.max(capH, Math.ceil(ctx.measureText(k).width + padX * 2));
+
+        roundedRectPath(cx, y, capW, capH, radius);
+        ctx.fillStyle = 'rgba(18,24,38,0.9)';
+        ctx.fill();
+        roundedRectPath(cx + 1, y + 1, capW - 2, capH * 0.45, Math.max(3, radius - 2));
+        ctx.fillStyle = 'rgba(255,255,255,0.08)';
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.4;
+        roundedRectPath(cx, y, capW, capH, radius);
+        ctx.stroke();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(k, cx + capW * 0.5, y + capH * 0.52);
+
+        cx += capW;
+        if (i < keys.length - 1) {
+          ctx.font = `700 ${Math.max(10, keyFont - 1)}px Segoe UI`;
+          ctx.fillStyle = '#bfd0e8';
+          ctx.fillText(' / ', cx + sepW * 0.5, y + capH * 0.52);
+          cx += sepW;
+        }
+      }
+      return { width: cx - x, height: capH };
+    }
+
+    // Backdrop + vignette
+    const vignette = ctx.createRadialGradient(W * 0.5, H * 0.5, Math.min(W, H) * 0.2, W * 0.5, H * 0.5, Math.max(W, H) * 0.65);
+    vignette.addColorStop(0, 'rgba(2,7,14,0.35)');
+    vignette.addColorStop(1, 'rgba(0,0,0,0.78)');
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, W, H);
+
+    roundedRectPath(panelX, panelY, panelW, panelH, Math.floor(clamp(22 * uiScale, 12, 28)));
+    ctx.fillStyle = 'rgba(8, 14, 24, 0.9)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(180, 205, 235, 0.4)';
     ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(panelX + 34, y + 1);
-    ctx.lineTo(panelX + panelW - 34, y + 1);
     ctx.stroke();
 
-    y += lineGap;
-    ctx.font = `bold ${bodySize}px Segoe UI`;
-    for (const line of lines) {
-      y += rowH;
-      if (!line) continue;
-      ctx.fillText(line, centerX, y);
+    const colPad = Math.floor(clamp(28 * uiScale, 14, 36));
+    const contentX = panelX + colPad;
+    const contentW = panelW - colPad * 2;
+    let y = panelY + colPad;
+
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `800 ${titleSize}px Segoe UI`;
+    ctx.fillText('SPACE RECYCLE HERO', contentX, y);
+    y += titleSize + Math.floor(clamp(6 * uiScale, 4, 10));
+
+    ctx.fillStyle = '#9ce8ff';
+    ctx.font = `700 ${subtitleSize}px Segoe UI`;
+    ctx.fillText('MISSION CONTROLS', contentX, y);
+    y += subtitleSize + Math.floor(clamp(10 * uiScale, 8, 14));
+
+    ctx.strokeStyle = 'rgba(120, 170, 220, 0.45)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(contentX, y);
+    ctx.lineTo(contentX + contentW, y);
+    ctx.stroke();
+    y += Math.floor(clamp(14 * uiScale, 10, 18));
+
+    const lineH = Math.floor(clamp(bodySize * 1.35, 15, 30));
+    for (const line of storyBlurb) {
+      y = drawWrappedText(line, contentX, y, contentW, lineH);
+    }
+    y += Math.floor(clamp(8 * uiScale, 6, 12));
+
+    function drawBulletSection(title, bullets) {
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `700 ${sectionSize}px Segoe UI`;
+      ctx.fillText(title, contentX, y);
+      y += sectionSize + Math.floor(clamp(5 * uiScale, 4, 9));
+
+      for (const b of bullets) {
+        ctx.fillStyle = '#8ce5ff';
+        ctx.font = `700 ${Math.max(10, bodySize)}px Segoe UI`;
+        ctx.fillText('•', contentX, y + 1);
+        y = drawWrappedText(b, contentX + Math.floor(clamp(16 * uiScale, 10, 20)), y, contentW - Math.floor(clamp(16 * uiScale, 10, 20)), lineH, '#d9e7f8', `500 ${bodySize}px Segoe UI`);
+      }
+      y += Math.floor(clamp(6 * uiScale, 4, 10));
     }
 
-    ctx.restore();
+    drawBulletSection('How to Play', howToPlay);
+    drawBulletSection('Tips', tips);
+
+    ctx.strokeStyle = 'rgba(120, 170, 220, 0.45)';
+    ctx.beginPath();
+    ctx.moveTo(contentX, y);
+    ctx.lineTo(contentX + contentW, y);
+    ctx.stroke();
+    y += Math.floor(clamp(14 * uiScale, 10, 18));
+
+    // Controls grid
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `700 ${sectionSize}px Segoe UI`;
+    ctx.fillText('Controls', contentX, y);
+    y += sectionSize + Math.floor(clamp(8 * uiScale, 6, 12));
+
+    const keyColW = clamp(contentW * 0.34, 170, 310);
+    const descX = contentX + keyColW + Math.floor(clamp(16 * uiScale, 10, 24));
+    const descW = contentW - keyColW - Math.floor(clamp(16 * uiScale, 10, 24));
+
+    for (const row of controls) {
+      const cap = drawKeycaps(row.keys, contentX, y);
+      const descLineH = Math.floor(clamp(bodySize * 1.3, 14, 28));
+      const descFont = `600 ${bodySize}px Segoe UI`;
+      const descLines = getWrappedLines(row.text, descW, descFont);
+      const descBlockH = descLines.length * descLineH;
+      const descY = y + Math.max(0, Math.floor((cap.height - descBlockH) * 0.5));
+      const descYEnd = drawWrappedText(row.text, descX, descY, descW, descLineH, '#f0f5ff', descFont, 'left');
+      y = Math.max(y + cap.height, descYEnd) + Math.floor(clamp(8 * uiScale, 5, 10));
+    }
+
+    const footerLineH = Math.floor(clamp(bodySize * 1.3, 14, 28));
+    const footerText = 'Land gently on skids, refuel pads refill fuel, and recycle pads score delivered cargo.';
+    ctx.font = `600 ${bodySize}px Segoe UI`;
+    const footerWords = footerText.split(' ');
+    let footerLines = 1;
+    let probeLine = '';
+    for (const word of footerWords) {
+      const nextProbe = probeLine ? `${probeLine} ${word}` : word;
+      if (ctx.measureText(nextProbe).width > contentW && probeLine) {
+        footerLines += 1;
+        probeLine = word;
+      } else {
+        probeLine = nextProbe;
+      }
+    }
+
+    const footerY = panelY + panelH - colPad - footerLineH * footerLines;
+    drawWrappedText(footerText, contentX, footerY, contentW, footerLineH, '#bfe8c8', `600 ${bodySize}px Segoe UI`);
   }
+
 
 
 
@@ -2062,20 +2752,7 @@
     drawBottomConsole();
 
     if (game.showHelp) {
-      drawLeftInfoPanel('MISSION CONTROLS', [
-        'A / D — Rotate the ship left or right while flying.',
-        'W / S — Increase or decrease engine throttle.',
-        'SPACE — Start mission, then open or close the cargo tray.',
-        'K / L — Rotate the arm base counterclockwise / clockwise.',
-        'I / O — Move arm segment 1 up / down.',
-        'N / M — Move arm segment 2 up / down.',
-        ', / . — Close or open the claw to grab cargo.',
-        'E — Extend or retract landing gear (2-second movement).',
-        'Q — Toggle track mode when landed and stable.',
-        'H — Show/hide this help panel. ESC — Pause/unpause.',
-        'Land gently on skids, refuel pads refill fuel,',
-        'and recycle pads score delivered cargo.',
-      ]);
+      drawMissionHelpPanel();
     }
 
   }
