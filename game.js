@@ -674,6 +674,19 @@
     hydroGain.connect(master);
     hydro.start();
 
+    const trackEngineGain = ctxA.createGain();
+    trackEngineGain.gain.value = 0;
+    const trackEngine = ctxA.createOscillator();
+    trackEngine.type = 'sawtooth';
+    trackEngine.frequency.value = 64;
+    const trackEngineFilter = ctxA.createBiquadFilter();
+    trackEngineFilter.type = 'lowpass';
+    trackEngineFilter.frequency.value = 420;
+    trackEngine.connect(trackEngineFilter);
+    trackEngineFilter.connect(trackEngineGain);
+    trackEngineGain.connect(master);
+    trackEngine.start();
+
     game.audio = {
       ctx: ctxA,
       master,
@@ -683,6 +696,10 @@
       rocketToneGain,
       hydro,
       hydroGain,
+      trackEngine,
+      trackEngineGain,
+      trackEngineFilter,
+      lastThudTime: -10,
     };
   }
 
@@ -722,6 +739,71 @@
     hiss.stop(now + 0.17);
   }
 
+
+  function playExplosionSound() {
+    const a = game.audio;
+    if (!a) return;
+    const now = a.ctx.currentTime;
+
+    const boom = a.ctx.createOscillator();
+    boom.type = 'triangle';
+    boom.frequency.setValueAtTime(140, now);
+    boom.frequency.exponentialRampToValueAtTime(42, now + 0.38);
+
+    const tail = a.ctx.createOscillator();
+    tail.type = 'sawtooth';
+    tail.frequency.setValueAtTime(95, now);
+    tail.frequency.exponentialRampToValueAtTime(28, now + 0.48);
+
+    const gain = a.ctx.createGain();
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(0.22, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.52);
+
+    const filter = a.ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(800, now);
+
+    boom.connect(filter);
+    tail.connect(filter);
+    filter.connect(gain);
+    gain.connect(a.master);
+
+    boom.start(now);
+    tail.start(now + 0.01);
+    boom.stop(now + 0.53);
+    tail.stop(now + 0.53);
+  }
+
+  function playCargoThudSound(intensity = 1) {
+    const a = game.audio;
+    if (!a) return;
+    const now = a.ctx.currentTime;
+    if (now - a.lastThudTime < 0.07) return;
+    a.lastThudTime = now;
+
+    const thud = a.ctx.createOscillator();
+    thud.type = 'triangle';
+    thud.frequency.setValueAtTime(82 + 10 * intensity, now);
+    thud.frequency.exponentialRampToValueAtTime(42, now + 0.12);
+
+    const gain = a.ctx.createGain();
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(0.06 + Math.min(0.09, 0.03 * intensity), now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.17);
+
+    const filter = a.ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(460, now);
+
+    thud.connect(filter);
+    filter.connect(gain);
+    gain.connect(a.master);
+
+    thud.start(now);
+    thud.stop(now + 0.18);
+  }
+
   function updateAudio() {
     const a = game.audio;
     if (!a) return;
@@ -747,6 +829,13 @@
     const targetHydro = (playing && armMoving) ? 0.09295 : 0;
     a.hydroGain.gain.setTargetAtTime(targetHydro, t, 0.02);
     a.hydro.frequency.setTargetAtTime(180 + Math.abs(Math.sin(t * 18)) * 180, t, 0.015);
+
+    const trackModeActive = playing && ship.tracksDeploy > 0.55;
+    const trackSpeed = Math.abs(ship.vx);
+    const targetTrackGain = trackModeActive ? (0.03 + Math.min(0.13, trackSpeed * 0.11)) : 0;
+    a.trackEngineGain.gain.setTargetAtTime(targetTrackGain, t, 0.06);
+    a.trackEngine.frequency.setTargetAtTime(62 + Math.min(95, trackSpeed * 65), t, 0.07);
+    a.trackEngineFilter.frequency.setTargetAtTime(trackModeActive ? (350 + Math.min(900, trackSpeed * 420)) : 280, t, 0.08);
 
     a.master.gain.setTargetAtTime(playing ? 0.24 : 0.1, t, 0.08);
   }
@@ -782,6 +871,8 @@
     ship.grabbedCargo = null;
     ship.bounceCount = 0;
     ship.settleLock = false;
+
+    playExplosionSound();
 
     for (let i = 0; i < 28; i++) {
       const a = Math.random() * Math.PI * 2;
@@ -1241,7 +1332,9 @@
       }
       const gy = terrainY(c.x) - c.r;
       if (c.y > gy) {
+        const impactV = Math.abs(c.vy);
         c.y = gy;
+        if (impactV > 0.52) playCargoThudSound(clamp(impactV * 0.55, 0.6, 3));
         if (Math.abs(c.vy) > 0.3) c.vy *= -0.22;
         else c.vy = 0;
         c.vx *= 0.88;
