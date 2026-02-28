@@ -1457,96 +1457,12 @@
     ctx.fillStyle = '#02030b';
     ctx.fillRect(0, 0, W, H);
 
-    // Static background set pieces: Earth + ISS (visual only, no gameplay collision).
+    // Static background set pieces: ISS only (visual, non-interactive).
     const shipDiameterPx = shipShape.hullRadius * CONFIG.METER_TO_PX * 2;
-    const earthRadius = shipDiameterPx * 0.75; // 1.5x ship size (diameter basis).
-    const earthX = W * 0.84 - game.camera.x * 0.045 * CONFIG.METER_TO_PX;
-    const earthY = H * 0.18 - game.camera.y * 0.02 * CONFIG.METER_TO_PX;
-
-    ctx.globalAlpha = 0.95;
-    const earthGrad = ctx.createRadialGradient(
-      earthX - earthRadius * 0.35,
-      earthY - earthRadius * 0.35,
-      earthRadius * 0.2,
-      earthX,
-      earthY,
-      earthRadius,
-    );
-    earthGrad.addColorStop(0, '#d9f0ff');
-    earthGrad.addColorStop(0.22, '#4da5ff');
-    earthGrad.addColorStop(0.58, '#1f73c7');
-    earthGrad.addColorStop(1, '#0d2a57');
-    ctx.fillStyle = earthGrad;
-    ctx.beginPath();
-    ctx.arc(earthX, earthY, earthRadius, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Stylized green land masses.
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(earthX, earthY, earthRadius, 0, Math.PI * 2);
-    ctx.clip();
-    ctx.globalAlpha = 0.62;
-    ctx.fillStyle = '#5ec26a';
-
-    const landShapes = [
-      [-0.46, -0.28, 0.16, 0.1, -0.22],
-      [-0.34, -0.08, 0.33, 0.19, 0.18],
-      [-0.23, -0.34, 0.14, 0.09, 0.3],
-      [-0.12, 0.29, 0.17, 0.1, -0.18],
-      [-0.42, 0.12, 0.12, 0.08, -0.25],
-      [-0.08, 0.07, 0.28, 0.17, -0.06],
-      [-0.02, -0.18, 0.12, 0.08, 0.5],
-      [0.02, -0.34, 0.14, 0.09, 0.22],
-      [0.11, 0.28, 0.18, 0.11, 0.05],
-      [0.20, -0.19, 0.25, 0.14, -0.34],
-      [0.29, 0.03, 0.19, 0.11, 0.12],
-      [0.39, -0.06, 0.11, 0.07, 0.2],
-      // Australia (lower-right hemisphere).
-      [0.36, 0.33, 0.14, 0.09, 0.08],
-      [0.24, -0.36, 0.12, 0.08, -0.12],
-      [0.44, 0.14, 0.1, 0.07, 0.2],
-      [0.04, 0.42, 0.13, 0.08, -0.02],
-      [-0.24, 0.44, 0.1, 0.06, 0.14],
-      [0.48, -0.2, 0.09, 0.06, -0.35],
-    ];
-
-    for (const [ox, oy, rx, ry, rot] of landShapes) {
-      ctx.beginPath();
-      ctx.ellipse(
-        earthX + earthRadius * ox,
-        earthY + earthRadius * oy,
-        earthRadius * rx,
-        earthRadius * ry,
-        rot,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
-    }
-    ctx.restore();
-
-    // Simple cloud bands / atmosphere glow.
-    ctx.globalAlpha = 0.22;
-    ctx.strokeStyle = '#f3fbff';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(earthX, earthY, earthRadius * 0.76, Math.PI * 0.95, Math.PI * 1.85);
-    ctx.stroke();
-    ctx.globalAlpha = 0.18;
-    ctx.beginPath();
-    ctx.arc(earthX, earthY, earthRadius * 0.54, Math.PI * 1.05, Math.PI * 1.8);
-    ctx.stroke();
-    ctx.globalAlpha = 0.28;
-    ctx.strokeStyle = '#9dd6ff';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(earthX, earthY, earthRadius * 1.08, Math.PI * 0.15, Math.PI * 1.75);
-    ctx.stroke();
 
     const issX = W * 0.57 - game.camera.x * 0.065 * CONFIG.METER_TO_PX;
     const issY = H * 0.1 - game.camera.y * 0.03 * CONFIG.METER_TO_PX;
-    const issScale = Math.max(0.8, Math.min(1.25, earthRadius / 60));
+    const issScale = Math.max(0.8, Math.min(1.25, shipDiameterPx / 50));
     ctx.save();
     ctx.translate(issX, issY);
     ctx.rotate(Math.sin(performance.now() * 0.0002) * 0.06 - 0.08);
@@ -2033,10 +1949,12 @@
     ctx.lineTo(W, y + 1);
     ctx.stroke();
 
-    const pad = 16;
-    const gap = 12;
-    const panelH = h - 24;
-    const panelY = y + 12;
+    const innerW = W - 32;
+    const uiScale = clamp(innerW / 1750, 0.56, 1);
+    const pad = Math.floor(16 * uiScale);
+    const gap = Math.max(6, Math.floor(12 * uiScale));
+    const panelH = h - Math.max(12, Math.floor(24 * uiScale));
+    const panelY = y + Math.max(6, Math.floor(12 * uiScale));
 
     function drawBar(x, w, label, value, unit = '%') {
       ctx.fillStyle = '#000';
@@ -2047,20 +1965,19 @@
       const fillW = Math.max(0, Math.min(1, value)) * (w - 18);
       ctx.fillRect(x + 9, panelY + panelH * 0.55, fillW, panelH * 0.28);
       ctx.fillStyle = '#7dff9c';
-      ctx.font = 'bold 14px Segoe UI';
-      ctx.fillText(label, x + 10, panelY + 20);
-      ctx.font = 'bold 18px Consolas, monospace';
-      ctx.fillText(`${Math.round(value * 100)}${unit}`, x + 10, panelY + 44);
+      ctx.font = `bold ${Math.max(10, Math.floor(14 * uiScale))}px Segoe UI`;
+      ctx.fillText(label, x + 8, panelY + Math.max(14, Math.floor(20 * uiScale)));
+      ctx.font = `bold ${Math.max(11, Math.floor(18 * uiScale))}px Consolas, monospace`;
+      ctx.fillText(`${Math.round(value * 100)}${unit}`, x + 8, panelY + Math.max(30, Math.floor(44 * uiScale)));
     }
 
-    const innerW = W - pad * 2;
-    const barW = Math.max(160, Math.min(280, innerW * 0.18));
+    const barW = clamp(innerW * 0.16, 92 * uiScale, 250 * uiScale);
     const fuelX = pad + barW + gap;
     drawBar(pad, barW, 'THROTTLE', ship.throttle);
     drawBar(fuelX, barW, 'FUEL', ship.fuel / 100);
 
-    const gaugeSize = Math.min(panelH - 10, 110);
-    const attitudePanelW = gaugeSize + 32;
+    const gaugeSize = clamp(Math.min(panelH - 8, 110 * uiScale), 44 * uiScale, 110 * uiScale);
+    const attitudePanelW = gaugeSize + Math.max(20, Math.floor(32 * uiScale));
     const attitudeX = fuelX + barW + gap;
     const gx = attitudeX + attitudePanelW / 2;
     const gy = panelY + panelH / 2 + 10;
@@ -2083,10 +2000,10 @@
     ctx.stroke();
     ctx.restore();
     ctx.fillStyle = '#7dff9c';
-    ctx.font = 'bold 13px Segoe UI';
+    ctx.font = `bold ${Math.max(10, Math.floor(13 * uiScale))}px Segoe UI`;
     ctx.fillText('ATTITUDE', gx - 30, panelY + 16);
 
-    const speedW = Math.max(144, Math.min(188, Math.floor(innerW * 0.14)));
+    const speedW = clamp(innerW * 0.125, 95 * uiScale, 180 * uiScale);
     const speedX = attitudeX + attitudePanelW + gap;
     const sgx = speedX + speedW * 0.5;
     const sgy = panelY + panelH * 0.68;
@@ -2150,12 +2067,12 @@
     ctx.restore();
 
     ctx.fillStyle = '#7dff9c';
-    ctx.font = 'bold 13px Segoe UI';
+    ctx.font = `bold ${Math.max(10, Math.floor(13 * uiScale))}px Segoe UI`;
     ctx.fillText('SPEED', speedX + 10, panelY + 16);
-    ctx.font = 'bold 14px "Consolas", monospace';
+    ctx.font = `bold ${Math.max(10, Math.floor(14 * uiScale))}px "Consolas", monospace`;
     ctx.fillText(`${speedMps.toFixed(1)} m/s`, speedX + 10, panelY + panelH - 10);
 
-    const weightW = Math.max(150, Math.min(190, Math.floor(innerW * 0.14)));
+    const weightW = clamp(innerW * 0.125, 98 * uiScale, 182 * uiScale);
     const weightX = speedX + speedW + gap;
     const wgx = weightX + weightW * 0.5;
     const wgy = panelY + panelH * 0.68;
@@ -2201,21 +2118,21 @@
     ctx.restore();
 
     ctx.fillStyle = '#7dff9c';
-    ctx.font = 'bold 13px Segoe UI';
+    ctx.font = `bold ${Math.max(10, Math.floor(13 * uiScale))}px Segoe UI`;
     ctx.fillText('WEIGHT', weightX + 10, panelY + 16);
-    ctx.font = 'bold 14px "Consolas", monospace';
+    ctx.font = `bold ${Math.max(10, Math.floor(14 * uiScale))}px "Consolas", monospace`;
     ctx.fillText(`${shipMass().toFixed(2)} t`, weightX + 10, panelY + panelH - 24);
     ctx.fillText(`CARGO ${cargoCount}/${CONFIG.trayCapacity}`, weightX + 10, panelY + panelH - 8);
 
     const dX = weightX + weightW + gap;
-    const totalW = Math.max(420, W - dX - pad);
-    const scoreW = Math.min(220, Math.max(150, totalW * 0.23));
+    const totalW = Math.max(220 * uiScale, W - dX - pad);
+    const scoreW = Math.min(200 * uiScale, Math.max(98 * uiScale, totalW * 0.23));
 
     // 50% wider mini-map target than the original design.
-    const targetMapW = clamp(Math.floor(W * 0.33), 270, 420);
-    const minDistW = 180;
-    const maxMapW = Math.max(150, totalW - scoreW - gap * 2 - minDistW);
-    const mapW = Math.max(150, Math.min(targetMapW, maxMapW));
+    const targetMapW = clamp(Math.floor(W * 0.3), 150 * uiScale, 360 * uiScale);
+    const minDistW = 110 * uiScale;
+    const maxMapW = Math.max(95 * uiScale, totalW - scoreW - gap * 2 - minDistW);
+    const mapW = Math.max(95 * uiScale, Math.min(targetMapW, maxMapW));
     const distW = Math.max(minDistW, totalW - scoreW - mapW - gap * 2);
 
     ctx.fillStyle = '#000';
@@ -2224,9 +2141,9 @@
     ctx.strokeRect(dX, panelY, distW, panelH);
     const dist = distanceToGroundMeters();
     ctx.fillStyle = '#7dff9c';
-    ctx.font = 'bold 15px Segoe UI';
+    ctx.font = `bold ${Math.max(10, Math.floor(15 * uiScale))}px Segoe UI`;
     ctx.fillText('DISTANCE TO GROUND', dX + 12, panelY + 22);
-    ctx.font = 'bold 44px "Consolas", monospace';
+    ctx.font = `bold ${Math.max(16, Math.floor(44 * uiScale))}px "Consolas", monospace`;
     ctx.fillText(`${dist.toFixed(1)} m`, dX + 12, panelY + panelH * 0.72);
 
     const mapX = dX + distW + gap;
@@ -2238,9 +2155,9 @@
     ctx.strokeStyle = '#0b5';
     ctx.strokeRect(scoreX, panelY, scoreW, panelH);
     ctx.fillStyle = '#7dff9c';
-    ctx.font = 'bold 15px Segoe UI';
+    ctx.font = `bold ${Math.max(10, Math.floor(15 * uiScale))}px Segoe UI`;
     ctx.fillText('SCORE', scoreX + 12, panelY + 22);
-    ctx.font = 'bold 46px "Consolas", monospace';
+    ctx.font = `bold ${Math.max(18, Math.floor(46 * uiScale))}px "Consolas", monospace`;
     ctx.fillText(`${game.score}`, scoreX + 12, panelY + panelH * 0.74);
   }
 
