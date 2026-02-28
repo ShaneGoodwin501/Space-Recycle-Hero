@@ -1990,7 +1990,8 @@
     if (loweringIntoShip) {
       ctx.save();
       ctx.beginPath();
-      ctx.rect(-3.2 * m, -3.6 * m, 6.4 * m, (shipShape.craneBase.y - 0.02) * m + 3.6 * m);
+      // Keep the whole upper arm visible while still hiding anything that drops below the bay lip.
+      ctx.rect(-5.8 * m, -8.2 * m, 11.6 * m, (shipShape.craneBase.y - 0.02) * m + 8.2 * m);
       ctx.clip();
     }
 
