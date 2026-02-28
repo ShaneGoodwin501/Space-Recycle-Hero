@@ -1481,6 +1481,24 @@
     ctx.arc(earthX, earthY, earthRadius, 0, Math.PI * 2);
     ctx.fill();
 
+    // Stylized green land masses.
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(earthX, earthY, earthRadius, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.globalAlpha = 0.55;
+    ctx.fillStyle = '#5ec26a';
+    ctx.beginPath();
+    ctx.ellipse(earthX - earthRadius * 0.22, earthY + earthRadius * 0.03, earthRadius * 0.3, earthRadius * 0.18, 0.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(earthX + earthRadius * 0.16, earthY - earthRadius * 0.16, earthRadius * 0.24, earthRadius * 0.13, -0.35, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(earthX + earthRadius * 0.08, earthY + earthRadius * 0.28, earthRadius * 0.16, earthRadius * 0.1, 0.1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
     // Simple cloud bands / atmosphere glow.
     ctx.globalAlpha = 0.22;
     ctx.strokeStyle = '#f3fbff';
@@ -1510,13 +1528,25 @@
     ctx.fillRect(-8 * issScale, -3 * issScale, 16 * issScale, 6 * issScale);
     ctx.fillStyle = '#6d7f98';
     ctx.fillRect(-4 * issScale, -7 * issScale, 8 * issScale, 14 * issScale);
+    // Expanded ISS solar arrays: multiple horizontal panel sections on both sides.
     ctx.fillStyle = '#4f7cc5';
-    ctx.fillRect(-32 * issScale, -6 * issScale, 20 * issScale, 12 * issScale);
-    ctx.fillRect(12 * issScale, -6 * issScale, 20 * issScale, 12 * issScale);
+    const panelW = 10 * issScale;
+    const panelH = 11 * issScale;
+    const panelGap = 1.8 * issScale;
+    for (let i = 0; i < 4; i++) {
+      const leftX = (-54 * issScale) + i * (panelW + panelGap);
+      const rightX = (13 * issScale) + i * (panelW + panelGap);
+      ctx.fillRect(leftX, -5.5 * issScale, panelW, panelH);
+      ctx.fillRect(rightX, -5.5 * issScale, panelW, panelH);
+    }
     ctx.strokeStyle = '#b9d5ff';
-    ctx.lineWidth = 1.4;
-    ctx.strokeRect(-32 * issScale, -6 * issScale, 20 * issScale, 12 * issScale);
-    ctx.strokeRect(12 * issScale, -6 * issScale, 20 * issScale, 12 * issScale);
+    ctx.lineWidth = 1.1;
+    for (let i = 0; i < 4; i++) {
+      const leftX = (-54 * issScale) + i * (panelW + panelGap);
+      const rightX = (13 * issScale) + i * (panelW + panelGap);
+      ctx.strokeRect(leftX, -5.5 * issScale, panelW, panelH);
+      ctx.strokeRect(rightX, -5.5 * issScale, panelW, panelH);
+    }
     ctx.restore();
 
     for (const p of planets) {
