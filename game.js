@@ -179,6 +179,8 @@
     };
   }
 
+  const ARM_STOW_DROP_MAX = 2.55;
+
   function rotate(v, a) {
     const c = Math.cos(a), s = Math.sin(a);
     return { x: v.x * c - v.y * s, y: v.x * s + v.y * c };
@@ -881,7 +883,7 @@
   game.camera.y = ship.y - 6;
 
   function getArmKinematics() {
-    const baseLocal = { x: shipShape.craneBase.x, y: shipShape.craneBase.y + ship.armStowDrop * 1.28 };
+    const baseLocal = { x: shipShape.craneBase.x, y: shipShape.craneBase.y + ship.armStowDrop * ARM_STOW_DROP_MAX };
     const base = worldFromLocal(ship, baseLocal);
     const shipUpAngle = ship.angle - Math.PI / 2;
     const a0 = shipUpAngle + ship.baseAngle;
@@ -1071,7 +1073,7 @@
     // Step 2: keep the arm vertical and lower it straight down into the ship.
     const lowerStart = 0.72;
     const lowerT = clamp((ship.armFoldBlend - lowerStart) / (1 - lowerStart), 0, 1);
-    ship.armStowDrop = lowerT;
+    ship.armStowDrop = lowerT * ARM_STOW_DROP_MAX;
     if (ship.armFolded || ship.armFoldBlend > 0.001) {
       const tFoldUp = clamp(ship.armFoldBlend / lowerStart, 0, 1);
       ship.baseAngle = lerp(ship.armDeployPose.baseAngle, verticalPose.baseAngle, tFoldUp);
@@ -1976,7 +1978,12 @@
     }
 
     // Crane segments
-    const base = { x: shipShape.craneBase.x, y: shipShape.craneBase.y + ship.armStowDrop * 1.28 };
+    if (ship.armFolded && ship.armFoldBlend > 0.995) {
+      // Fully stowed inside the ship bay.
+      ctx.restore();
+      return;
+    }
+    const base = { x: shipShape.craneBase.x, y: shipShape.craneBase.y + ship.armStowDrop * ARM_STOW_DROP_MAX };
     {
       const bAng = -Math.PI / 2 + ship.baseAngle;
       const seg1Len = 2.14;
