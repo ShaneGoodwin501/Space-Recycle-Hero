@@ -101,7 +101,10 @@
 
     if (e.code === 'Space') {
       if (game.state === 'READY') startMission();
-      else if (game.state === 'PLAYING') ship.trayExtended = !ship.trayExtended;
+      else if (game.state === 'PLAYING') {
+        ship.trayExtended = !ship.trayExtended;
+        playTraySealSound(ship.trayExtended);
+      }
     }
     if (e.code === 'KeyH') {
       if (game.state === 'PLAYING') {
@@ -680,6 +683,42 @@
       hydro,
       hydroGain,
     };
+  }
+
+
+  function playTraySealSound(opening) {
+    const a = game.audio;
+    if (!a) return;
+    const now = a.ctx.currentTime;
+
+    const tone = a.ctx.createOscillator();
+    tone.type = 'square';
+    tone.frequency.setValueAtTime(opening ? 320 : 250, now);
+    tone.frequency.exponentialRampToValueAtTime(opening ? 170 : 135, now + 0.17);
+
+    const hiss = a.ctx.createOscillator();
+    hiss.type = 'sawtooth';
+    hiss.frequency.setValueAtTime(opening ? 540 : 440, now);
+    hiss.frequency.exponentialRampToValueAtTime(opening ? 280 : 220, now + 0.12);
+
+    const gain = a.ctx.createGain();
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.085, now + 0.018);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.24);
+
+    const filter = a.ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(opening ? 1200 : 980, now);
+
+    tone.connect(filter);
+    hiss.connect(filter);
+    filter.connect(gain);
+    gain.connect(a.master);
+
+    tone.start(now);
+    hiss.start(now);
+    tone.stop(now + 0.25);
+    hiss.stop(now + 0.17);
   }
 
   function updateAudio() {
@@ -1615,7 +1654,8 @@
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.font = `700 ${Math.max(10, Math.floor(0.21 * m))}px "Segoe UI", Arial, sans-serif`;
-      ctx.fillText('CARGO', (tr.x + trayVisualW * 0.5) * m, (trayVisualY + trayVisualH * 0.5) * m);
+      const trayLabelX = (tr.x + trayVisualW * 0.5) * m - ctx.measureText(' ').width;
+      ctx.fillText('CARGO', trayLabelX, (trayVisualY + trayVisualH * 0.5) * m);
     }
 
     // Landing gear feet + support arms
@@ -1896,7 +1936,54 @@
     ctx.font = 'bold 13px Segoe UI';
     ctx.fillText('ATTITUDE', gx - 30, panelY + 16);
 
-    const dX = attitudeX + attitudePanelW + gap;
+    const speedW = Math.max(144, Math.min(188, Math.floor(innerW * 0.14)));
+    const speedX = attitudeX + attitudePanelW + gap;
+    const sgx = speedX + speedW * 0.5;
+    const sgy = panelY + panelH * 0.68;
+    const speedMps = Math.hypot(ship.vx, ship.vy);
+    const speedMax = 12;
+    const speedNorm = clamp(speedMps / speedMax, 0, 1);
+    const speedAng = lerp(Math.PI * 0.86, Math.PI * 0.14, speedNorm);
+
+    ctx.fillStyle = '#000';
+    ctx.fillRect(speedX, panelY, speedW, panelH);
+    ctx.strokeStyle = '#0b5';
+    ctx.strokeRect(speedX, panelY, speedW, panelH);
+    ctx.strokeStyle = '#7dff9c';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(sgx, sgy, gaugeSize * 0.36, Math.PI * 0.86, Math.PI * 0.14, false);
+    ctx.stroke();
+
+    for (let i = 0; i <= 4; i++) {
+      const t = i / 4;
+      const a = lerp(Math.PI * 0.86, Math.PI * 0.14, t);
+      const rOuter = gaugeSize * 0.36;
+      const rInner = rOuter - gaugeSize * 0.055;
+      ctx.beginPath();
+      ctx.moveTo(sgx + Math.cos(a) * rInner, sgy + Math.sin(a) * rInner);
+      ctx.lineTo(sgx + Math.cos(a) * rOuter, sgy + Math.sin(a) * rOuter);
+      ctx.stroke();
+    }
+
+    ctx.save();
+    ctx.translate(sgx, sgy);
+    ctx.rotate(speedAng);
+    ctx.strokeStyle = '#9ce8ff';
+    ctx.lineWidth = 2.6;
+    ctx.beginPath();
+    ctx.moveTo(-gaugeSize * 0.04, 0);
+    ctx.lineTo(gaugeSize * 0.28, 0);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.fillStyle = '#7dff9c';
+    ctx.font = 'bold 13px Segoe UI';
+    ctx.fillText('SPEED', speedX + 10, panelY + 16);
+    ctx.font = 'bold 14px "Consolas", monospace';
+    ctx.fillText(`${speedMps.toFixed(1)} m/s`, speedX + 10, panelY + panelH - 10);
+
+    const dX = speedX + speedW + gap;
     const totalW = Math.max(420, W - dX - pad);
     const scoreW = Math.min(220, Math.max(150, totalW * 0.23));
 
