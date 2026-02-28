@@ -2410,29 +2410,43 @@
       ctx.closePath();
     }
 
-    function drawWrappedText(text, x, y, maxW, lineH, color = '#d9e7f8', font = `500 ${bodySize}px Segoe UI`) {
+    function drawWrappedText(text, x, y, maxW, lineH, color = '#d9e7f8', font = `500 ${bodySize}px Segoe UI`, align = 'left') {
       ctx.font = font;
       ctx.fillStyle = color;
       const words = text.split(' ');
+      const lines = [];
       let line = '';
-      let yy = y;
       for (const w of words) {
         const probe = line ? `${line} ${w}` : w;
         if (ctx.measureText(probe).width > maxW && line) {
-          ctx.fillText(line, x, yy);
-          yy += lineH;
+          lines.push(line);
           line = w;
         } else line = probe;
       }
-      if (line) ctx.fillText(line, x, yy);
-      return yy + lineH;
+      if (line) lines.push(line);
+
+      let yy = y;
+      if (align === 'right') {
+        ctx.textAlign = 'right';
+        for (const ln of lines) {
+          ctx.fillText(ln, x + maxW, yy);
+          yy += lineH;
+        }
+      } else {
+        ctx.textAlign = 'left';
+        for (const ln of lines) {
+          ctx.fillText(ln, x, yy);
+          yy += lineH;
+        }
+      }
+      return yy;
     }
 
     function drawKeycaps(keys, x, y) {
       const capH = Math.floor(clamp(36 * uiScale, 22, 46));
       const padX = Math.floor(clamp(14 * uiScale, 8, 16));
       const radius = Math.floor(clamp(10 * uiScale, 6, 12));
-      const sepW = Math.floor(clamp(14 * uiScale, 10, 18));
+      const sepW = Math.floor(clamp(24 * uiScale, 14, 30));
       let cx = x;
       for (let i = 0; i < keys.length; i++) {
         const k = keys[i];
@@ -2459,7 +2473,7 @@
         if (i < keys.length - 1) {
           ctx.font = `700 ${Math.max(10, keyFont - 1)}px Segoe UI`;
           ctx.fillStyle = '#bfd0e8';
-          ctx.fillText('/', cx + sepW * 0.5, y + capH * 0.52);
+          ctx.fillText(' / ', cx + sepW * 0.5, y + capH * 0.52);
           cx += sepW;
         }
       }
@@ -2549,7 +2563,7 @@
     for (const row of controls) {
       const cap = drawKeycaps(row.keys, contentX, y);
       const descLineH = Math.floor(clamp(bodySize * 1.3, 14, 28));
-      const descYEnd = drawWrappedText(row.text, descX, y + Math.max(1, Math.floor((cap.height - descLineH) * 0.25)), descW, descLineH, '#f0f5ff', `600 ${bodySize}px Segoe UI`);
+      const descYEnd = drawWrappedText(row.text, descX, y + Math.max(1, Math.floor((cap.height - descLineH) * 0.22)), descW, descLineH, '#f0f5ff', `600 ${bodySize}px Segoe UI`, 'right');
       y = Math.max(y + cap.height, descYEnd) + Math.floor(clamp(8 * uiScale, 5, 10));
     }
 
