@@ -1457,6 +1457,68 @@
     ctx.fillStyle = '#02030b';
     ctx.fillRect(0, 0, W, H);
 
+    // Static background set pieces: Earth + ISS (visual only, no gameplay collision).
+    const shipDiameterPx = shipShape.hullRadius * CONFIG.METER_TO_PX * 2;
+    const earthRadius = shipDiameterPx * 0.75; // 1.5x ship size (diameter basis).
+    const earthX = W * 0.84 - game.camera.x * 0.045 * CONFIG.METER_TO_PX;
+    const earthY = H * 0.18 - game.camera.y * 0.02 * CONFIG.METER_TO_PX;
+
+    ctx.globalAlpha = 0.95;
+    const earthGrad = ctx.createRadialGradient(
+      earthX - earthRadius * 0.35,
+      earthY - earthRadius * 0.35,
+      earthRadius * 0.2,
+      earthX,
+      earthY,
+      earthRadius,
+    );
+    earthGrad.addColorStop(0, '#d9f0ff');
+    earthGrad.addColorStop(0.22, '#4da5ff');
+    earthGrad.addColorStop(0.58, '#1f73c7');
+    earthGrad.addColorStop(1, '#0d2a57');
+    ctx.fillStyle = earthGrad;
+    ctx.beginPath();
+    ctx.arc(earthX, earthY, earthRadius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Simple cloud bands / atmosphere glow.
+    ctx.globalAlpha = 0.22;
+    ctx.strokeStyle = '#f3fbff';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(earthX, earthY, earthRadius * 0.76, Math.PI * 0.95, Math.PI * 1.85);
+    ctx.stroke();
+    ctx.globalAlpha = 0.18;
+    ctx.beginPath();
+    ctx.arc(earthX, earthY, earthRadius * 0.54, Math.PI * 1.05, Math.PI * 1.8);
+    ctx.stroke();
+    ctx.globalAlpha = 0.28;
+    ctx.strokeStyle = '#9dd6ff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(earthX, earthY, earthRadius * 1.08, Math.PI * 0.15, Math.PI * 1.75);
+    ctx.stroke();
+
+    const issX = W * 0.57 - game.camera.x * 0.065 * CONFIG.METER_TO_PX;
+    const issY = H * 0.1 - game.camera.y * 0.03 * CONFIG.METER_TO_PX;
+    const issScale = Math.max(0.8, Math.min(1.25, earthRadius / 60));
+    ctx.save();
+    ctx.translate(issX, issY);
+    ctx.rotate(Math.sin(performance.now() * 0.0002) * 0.06 - 0.08);
+    ctx.globalAlpha = 0.88;
+    ctx.fillStyle = '#9fb0c7';
+    ctx.fillRect(-8 * issScale, -3 * issScale, 16 * issScale, 6 * issScale);
+    ctx.fillStyle = '#6d7f98';
+    ctx.fillRect(-4 * issScale, -7 * issScale, 8 * issScale, 14 * issScale);
+    ctx.fillStyle = '#4f7cc5';
+    ctx.fillRect(-32 * issScale, -6 * issScale, 20 * issScale, 12 * issScale);
+    ctx.fillRect(12 * issScale, -6 * issScale, 20 * issScale, 12 * issScale);
+    ctx.strokeStyle = '#b9d5ff';
+    ctx.lineWidth = 1.4;
+    ctx.strokeRect(-32 * issScale, -6 * issScale, 20 * issScale, 12 * issScale);
+    ctx.strokeRect(12 * issScale, -6 * issScale, 20 * issScale, 12 * issScale);
+    ctx.restore();
+
     for (const p of planets) {
       const px = (p.x - game.camera.x * 0.08) * CONFIG.METER_TO_PX + W / 2;
       const py = (p.y - game.camera.y * 0.03) * CONFIG.METER_TO_PX + H * 0.2;
