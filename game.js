@@ -48,6 +48,7 @@
     trackDriveAccel: 4.8,
     trackDriveMaxSpeed: 1.35,
     landingGearTransitionSec: 2,
+    trayCapacity: 5,
   };
 
   const canvas = document.getElementById('gameCanvas');
@@ -1258,6 +1259,25 @@
       else c.restTimer = 0;
     }
 
+    function trayHasCapacity() {
+      return ship.storedCargoIds.length < CONFIG.trayCapacity;
+    }
+
+    function bounceCargoOffTrayTop(c, tr, local) {
+      const bounceLocal = {
+        x: clamp(local.x, tr.x + c.r, tr.x + tr.w - c.r),
+        y: tr.y - c.r - 0.03,
+      };
+      const bounceWorld = worldFromLocal(ship, bounceLocal);
+      c.x = bounceWorld.x;
+      c.y = bounceWorld.y;
+      const up = rotate({ x: 0, y: -1 }, ship.angle);
+      c.vx = ship.vx + up.x * (1.2 + Math.random() * 0.8) + (Math.random() - 0.5) * 0.8;
+      c.vy = ship.vy + up.y * (1.2 + Math.random() * 0.8) - (0.2 + Math.random() * 0.5);
+      c.ignoreTrayTimer = 0.45;
+      c.restTimer = 0;
+    }
+
     // Tray catch: dropped/free cargo that enters tray bounds is caught and stored.
     if (ship.traySlide > 0.55) for (const c of cargos) {
       if (c.scored || c.accepting || c.stored || c.grabbed || c.popping || c.ignoreTrayTimer > 0) continue;
@@ -1265,6 +1285,10 @@
       const tr = getTrayRect();
       const inTray = local.x > tr.x + c.r && local.x < tr.x + tr.w - c.r && local.y > tr.y + c.r && local.y < tr.y + tr.h - c.r;
       if (!inTray) continue;
+      if (!trayHasCapacity()) {
+        bounceCargoOffTrayTop(c, tr, local);
+        continue;
+      }
       c.stored = true;
       c.vx = ship.vx;
       c.vy = ship.vy;
@@ -1284,13 +1308,19 @@
         const inTray = local.x > tr.x && local.x < tr.x + tr.w && local.y > tr.y && local.y < tr.y + tr.h;
         const slow = Math.hypot(ship.vx, ship.vy) < 1.0;
         if (inTray && (ship.landed || slow)) {
-          c.grabbed = false;
-          c.stored = true;
-          c.localPos = { x: clamp(local.x, tr.x + c.r, tr.x + tr.w - c.r), y: clamp(local.y, tr.y + c.r, tr.y + tr.h - c.r) };
-          ship.grabbedCargo = null;
-          if (!ship.storedCargoIds.includes(c.id)) {
-            ship.storedCargoIds.push(c.id);
-            ship.cargoMass += c.mass;
+          if (!trayHasCapacity()) {
+            c.grabbed = false;
+            ship.grabbedCargo = null;
+            bounceCargoOffTrayTop(c, tr, local);
+          } else {
+            c.grabbed = false;
+            c.stored = true;
+            c.localPos = { x: clamp(local.x, tr.x + c.r, tr.x + tr.w - c.r), y: clamp(local.y, tr.y + c.r, tr.y + tr.h - c.r) };
+            ship.grabbedCargo = null;
+            if (!ship.storedCargoIds.includes(c.id)) {
+              ship.storedCargoIds.push(c.id);
+              ship.cargoMass += c.mass;
+            }
           }
         }
       }
@@ -2005,7 +2035,59 @@
     ctx.font = 'bold 14px "Consolas", monospace';
     ctx.fillText(`${speedMps.toFixed(1)} m/s`, speedX + 10, panelY + panelH - 10);
 
-    const dX = speedX + speedW + gap;
+    const weightW = Math.max(150, Math.min(190, Math.floor(innerW * 0.14)));
+    const weightX = speedX + speedW + gap;
+    const wgx = weightX + weightW * 0.5;
+    const wgy = panelY + panelH * 0.68;
+    const maxCargoMass = CONFIG.trayCapacity * Math.max(...cargoTypes.map((t) => t.mass));
+    const cargoCount = ship.storedCargoIds.length;
+    const cargoCountNorm = clamp(cargoCount / CONFIG.trayCapacity, 0, 1);
+    const cargoMassNorm = clamp(ship.cargoMass / Math.max(0.001, maxCargoMass), 0, 1);
+    const weightNorm = clamp(Math.max(cargoCountNorm, cargoMassNorm), 0, 1);
+    const weightStartAng = Math.PI * (7 / 6);
+    const weightEndAng = Math.PI * (11 / 6);
+    const weightAng = lerp(weightStartAng, weightEndAng, weightNorm);
+
+    ctx.fillStyle = '#000';
+    ctx.fillRect(weightX, panelY, weightW, panelH);
+    ctx.strokeStyle = '#0b5';
+    ctx.strokeRect(weightX, panelY, weightW, panelH);
+    ctx.strokeStyle = '#7dff9c';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(wgx, wgy, gaugeSize * 0.34, weightStartAng, weightEndAng, false);
+    ctx.stroke();
+
+    for (let i = 0; i <= CONFIG.trayCapacity; i++) {
+      const t = i / CONFIG.trayCapacity;
+      const a = lerp(weightStartAng, weightEndAng, t);
+      const rOuter = gaugeSize * 0.34;
+      const rInner = rOuter - gaugeSize * 0.05;
+      ctx.beginPath();
+      ctx.moveTo(wgx + Math.cos(a) * rInner, wgy + Math.sin(a) * rInner);
+      ctx.lineTo(wgx + Math.cos(a) * rOuter, wgy + Math.sin(a) * rOuter);
+      ctx.stroke();
+    }
+
+    ctx.save();
+    ctx.translate(wgx, wgy);
+    ctx.rotate(weightAng);
+    ctx.strokeStyle = '#ffd18b';
+    ctx.lineWidth = 2.6;
+    ctx.beginPath();
+    ctx.moveTo(-gaugeSize * 0.04, 0);
+    ctx.lineTo(gaugeSize * 0.26, 0);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.fillStyle = '#7dff9c';
+    ctx.font = 'bold 13px Segoe UI';
+    ctx.fillText('WEIGHT', weightX + 10, panelY + 16);
+    ctx.font = 'bold 14px "Consolas", monospace';
+    ctx.fillText(`${shipMass().toFixed(2)} t`, weightX + 10, panelY + panelH - 24);
+    ctx.fillText(`CARGO ${cargoCount}/${CONFIG.trayCapacity}`, weightX + 10, panelY + panelH - 8);
+
+    const dX = weightX + weightW + gap;
     const totalW = Math.max(420, W - dX - pad);
     const scoreW = Math.min(220, Math.max(150, totalW * 0.23));
 
