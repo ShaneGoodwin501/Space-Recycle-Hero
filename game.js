@@ -1610,6 +1610,14 @@
     ctx.fillRect(tr.x * m, trayVisualY * m, trayEdgeW, trayVisualH * m);
     ctx.fillRect((tr.x + trayVisualW) * m - trayEdgeW, trayVisualY * m, trayEdgeW, trayVisualH * m);
 
+    if (ship.traySlide > 0.2) {
+      ctx.fillStyle = '#000000';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = `700 ${Math.max(10, Math.floor(0.21 * m))}px "Segoe UI", Arial, sans-serif`;
+      ctx.fillText('CARGO', (tr.x + trayVisualW * 0.5) * m, (trayVisualY + trayVisualH * 0.5) * m);
+    }
+
     // Landing gear feet + support arms
     const supportLocals = getSupportLocals();
     const footL = supportLocals.left;
