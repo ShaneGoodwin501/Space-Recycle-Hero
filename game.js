@@ -1020,12 +1020,29 @@
         ship.vy = 0;
         ship.vx *= 0.985;
         ship.av *= 0.25;
+        const ground = Math.min(terrainY(skidL.x) - supportLLocal.y, terrainY(skidR.x) - supportRLocal.y);
+        ship.y = ground;
       } else {
         ship.vx *= 0.93;
-        ship.av *= 0.85;
+        ship.av *= 0.55;
+
+        // Settle to slope so both landing feet sit on terrain without popping.
+        const skidBaseLX = clamp(ship.x + supportLLocal.x, 0, CONFIG.worldWidth);
+        const skidBaseRX = clamp(ship.x + supportRLocal.x, 0, CONFIG.worldWidth);
+        const gyL = terrainY(skidBaseLX);
+        const gyR = terrainY(skidBaseRX);
+        const targetAngle = Math.atan2(gyR - gyL, Math.max(0.001, skidBaseRX - skidBaseLX));
+        ship.angle = lerp(ship.angle, targetAngle, clamp(10 * dt, 0, 1));
+        ship.av *= 0.45;
+
+        const settledSkidL = worldFromLocal(ship, supportLLocal);
+        const settledSkidR = worldFromLocal(ship, supportRLocal);
+        const dL = terrainY(settledSkidL.x) - settledSkidL.y;
+        const dR = terrainY(settledSkidR.x) - settledSkidR.y;
+        const yAdjust = clamp((dL + dR) * 0.5, -0.12, 0.12);
+        ship.y += yAdjust;
+        ship.vy = 0;
       }
-      const ground = Math.min(terrainY(skidL.x) - supportLLocal.y, terrainY(skidR.x) - supportRLocal.y);
-      ship.y = tracksDriving ? ground : Math.min(ship.y, ground);
     }
 
     // Refuel only with safe skid landing on refuel pad.
