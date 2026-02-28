@@ -54,6 +54,8 @@
 
   let W = 1280;
   let H = 720;
+  let stars = [];
+  let planets = [];
 
   function resize() {
     const dpr = Math.max(1, window.devicePixelRatio || 1);
@@ -225,8 +227,6 @@
   }
 
   let terrain = generateTerrain();
-  let stars = [];
-  let planets = [];
 
   function regenerateStars() {
     stars = Array.from({ length: CONFIG.starCount }, () => ({
