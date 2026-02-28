@@ -2335,17 +2335,34 @@
 
 
   function drawMissionHelpPanel() {
-    const uiScale = clamp(Math.min(W / 1600, H / 980), 0.58, 1.2);
-    const panelW = clamp(W * 0.9, 540, 1260);
-    const panelH = clamp(H * 0.88, 420, 860);
+    const baseScale = clamp(Math.min(W / 1600, H / 980), 0.52, 1.15);
+    const panelW = clamp(W * 0.92, 540, 1260);
+    const panelH = clamp(H * 0.9, 420, 880);
     const panelX = Math.floor((W - panelW) * 0.5);
     const panelY = Math.floor((H - panelH) * 0.5);
 
-    const titleSize = Math.floor(clamp(46 * uiScale, 24, 60));
-    const subtitleSize = Math.floor(clamp(26 * uiScale, 16, 34));
-    const bodySize = Math.floor(clamp(16 * uiScale, 11, 22));
-    const sectionSize = Math.floor(clamp(20 * uiScale, 13, 28));
-    const keyFont = Math.floor(clamp(15 * uiScale, 10, 21));
+    let uiScale = baseScale;
+    for (let i = 0; i < 7; i++) {
+      const titleTry = Math.floor(clamp(44 * uiScale, 22, 56));
+      const subtitleTry = Math.floor(clamp(24 * uiScale, 15, 32));
+      const bodyTry = Math.floor(clamp(15 * uiScale, 10, 20));
+      const sectionTry = Math.floor(clamp(18 * uiScale, 12, 24));
+      const capHTry = Math.floor(clamp(36 * uiScale, 20, 44));
+      const lineHTry = Math.floor(clamp(bodyTry * 1.3, 13, 26));
+      const colPadTry = Math.floor(clamp(28 * uiScale, 12, 34));
+      const footerLinesTry = 2;
+      const estimatedStart = colPadTry + titleTry + subtitleTry + sectionTry * 3 + lineHTry * (3 + 4 + 4) + 90 * uiScale;
+      const availableForControls = panelH - colPadTry - (lineHTry * footerLinesTry) - estimatedStart;
+      const neededControls = 12 * (capHTry + Math.floor(clamp(8 * uiScale, 4, 9)));
+      if (neededControls <= availableForControls) break;
+      uiScale *= 0.9;
+    }
+
+    const titleSize = Math.floor(clamp(44 * uiScale, 22, 56));
+    const subtitleSize = Math.floor(clamp(24 * uiScale, 15, 32));
+    const bodySize = Math.floor(clamp(15 * uiScale, 10, 20));
+    const sectionSize = Math.floor(clamp(18 * uiScale, 12, 24));
+    const keyFont = Math.floor(clamp(14 * uiScale, 9, 19));
 
     const controls = [
       { keys: ['A', 'D'], text: 'Rotate the ship left or right while flying.' },
@@ -2534,7 +2551,6 @@
       const descLineH = Math.floor(clamp(bodySize * 1.3, 14, 28));
       const descYEnd = drawWrappedText(row.text, descX, y + Math.max(1, Math.floor((cap.height - descLineH) * 0.25)), descW, descLineH, '#f0f5ff', `600 ${bodySize}px Segoe UI`);
       y = Math.max(y + cap.height, descYEnd) + Math.floor(clamp(8 * uiScale, 5, 10));
-      if (y > panelY + panelH - Math.floor(clamp(42 * uiScale, 24, 56))) break;
     }
 
     const footerLineH = Math.floor(clamp(bodySize * 1.3, 14, 28));
