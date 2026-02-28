@@ -2334,74 +2334,213 @@
   }
 
 
-  function drawLeftInfoPanel(title, lines) {
-    const panelW = Math.min(860, Math.max(420, Math.floor(W * 0.8)));
-    const panelH = Math.min(H - 36, Math.max(320, Math.floor(H * 0.8)));
+  function drawMissionHelpPanel() {
+    const uiScale = clamp(Math.min(W / 1600, H / 980), 0.58, 1.2);
+    const panelW = clamp(W * 0.9, 540, 1260);
+    const panelH = clamp(H * 0.88, 420, 860);
     const panelX = Math.floor((W - panelW) * 0.5);
     const panelY = Math.floor((H - panelH) * 0.5);
 
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = 'rgba(8,12,20,0.94)';
-    ctx.fillRect(panelX, panelY, panelW, panelH);
-    ctx.strokeStyle = '#2b2b2b';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(panelX, panelY, panelW, panelH);
+    const titleSize = Math.floor(clamp(46 * uiScale, 24, 60));
+    const subtitleSize = Math.floor(clamp(26 * uiScale, 16, 34));
+    const bodySize = Math.floor(clamp(16 * uiScale, 11, 22));
+    const sectionSize = Math.floor(clamp(20 * uiScale, 13, 28));
+    const keyFont = Math.floor(clamp(15 * uiScale, 10, 21));
 
-    const padX = panelX + 30;
-    const padY = panelY + 24;
-    const maxW = panelW - 60;
-    const nonEmpty = lines.filter(Boolean);
+    const controls = [
+      { keys: ['A', 'D'], text: 'Rotate the ship left or right while flying.' },
+      { keys: ['W', 'S'], text: 'Increase or decrease engine throttle.' },
+      { keys: ['SPACE'], text: 'Start mission, then open or close the cargo tray.' },
+      { keys: ['K', 'L'], text: 'Rotate the arm base counterclockwise / clockwise.' },
+      { keys: ['I', 'O'], text: 'Move arm segment 1 up / down.' },
+      { keys: ['N', 'M'], text: 'Move arm segment 2 up / down.' },
+      { keys: [',', '.'], text: 'Close or open the claw to grab cargo.' },
+      { keys: ['F'], text: 'Fold arm down for flight / unfold arm for cargo use.' },
+      { keys: ['E'], text: 'Extend or retract landing gear (2-second movement).' },
+      { keys: ['Q'], text: 'Toggle track mode when landed and stable.' },
+      { keys: ['H'], text: 'Show/hide this help panel.' },
+      { keys: ['ESC'], text: 'Pause/unpause.' },
+    ];
 
-    let bodySize = 26;
-    for (; bodySize >= 11; bodySize -= 1) {
-      const titleSize = Math.round(bodySize * 1.5);
-      const lineGap = Math.max(8, Math.round(bodySize * 0.52));
-      const rowH = Math.round(bodySize * 1.45);
-      const titleH = Math.round(titleSize * 1.12);
-      const totalRowsH = titleH + lineGap * 2 + lines.length * rowH;
-      const maxLine = nonEmpty.reduce((m, line) => {
-        ctx.font = `bold ${bodySize}px Segoe UI`;
-        return Math.max(m, ctx.measureText(line).width);
-      }, 0);
-      ctx.font = `bold ${titleSize}px Segoe UI`;
-      const titleW = ctx.measureText(title).width;
-      if (totalRowsH <= panelH - 34 && Math.max(maxLine, titleW) <= maxW) break;
+    const storyBlurb = [
+      'Trash Bugs keep dumping junk across the lunar surface, and every new wave makes the Moon a little messier.',
+      'You are the pilot of Space Recycle Hero, hauling debris before the bugs bury the outposts in scrap.',
+      'Grab cargo, sort it, and keep your landings steady to save the Moon one load at a time.',
+    ];
+
+    const howToPlay = [
+      'Collect trash pieces with the arm and claw.',
+      'Deliver cargo to recycle pads to score points.',
+      'Refuel at refuel pads to stay in the mission.',
+      'Land gently on skids for stability.',
+    ];
+
+    const tips = [
+      'Keep the tray closed in rough movement so cargo does not spill.',
+      'Soft touchdowns prevent crashes and give you cleaner pickups.',
+      'Use track mode when landed and stable for precise ground movement.',
+      'If your tray is full, offload before collecting more debris.',
+    ];
+
+    function roundedRectPath(x, y, w, h, r) {
+      const rr = Math.min(r, w * 0.5, h * 0.5);
+      ctx.beginPath();
+      ctx.moveTo(x + rr, y);
+      ctx.arcTo(x + w, y, x + w, y + h, rr);
+      ctx.arcTo(x + w, y + h, x, y + h, rr);
+      ctx.arcTo(x, y + h, x, y, rr);
+      ctx.arcTo(x, y, x + w, y, rr);
+      ctx.closePath();
     }
 
-    const titleSize = Math.round(bodySize * 1.5);
-    const lineGap = Math.max(8, Math.round(bodySize * 0.52));
-    const rowH = Math.round(bodySize * 1.45);
+    function drawWrappedText(text, x, y, maxW, lineH, color = '#d9e7f8', font = `500 ${bodySize}px Segoe UI`) {
+      ctx.font = font;
+      ctx.fillStyle = color;
+      const words = text.split(' ');
+      let line = '';
+      let yy = y;
+      for (const w of words) {
+        const probe = line ? `${line} ${w}` : w;
+        if (ctx.measureText(probe).width > maxW && line) {
+          ctx.fillText(line, x, yy);
+          yy += lineH;
+          line = w;
+        } else line = probe;
+      }
+      if (line) ctx.fillText(line, x, yy);
+      return yy + lineH;
+    }
 
-    ctx.save();
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
+    function drawKeycaps(keys, x, y) {
+      const capH = Math.floor(clamp(36 * uiScale, 22, 46));
+      const padX = Math.floor(clamp(14 * uiScale, 8, 16));
+      const radius = Math.floor(clamp(10 * uiScale, 6, 12));
+      const sepW = Math.floor(clamp(14 * uiScale, 10, 18));
+      let cx = x;
+      for (let i = 0; i < keys.length; i++) {
+        const k = keys[i];
+        ctx.font = `700 ${keyFont}px Segoe UI`;
+        const capW = Math.max(capH, Math.ceil(ctx.measureText(k).width + padX * 2));
 
-    const centerX = panelX + panelW * 0.5;
-    let y = padY + Math.round(titleSize * 0.6);
+        roundedRectPath(cx, y, capW, capH, radius);
+        ctx.fillStyle = 'rgba(18,24,38,0.9)';
+        ctx.fill();
+        roundedRectPath(cx + 1, y + 1, capW - 2, capH * 0.45, Math.max(3, radius - 2));
+        ctx.fillStyle = 'rgba(255,255,255,0.08)';
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.4;
+        roundedRectPath(cx, y, capW, capH, radius);
+        ctx.stroke();
 
-    ctx.fillStyle = '#ffffff';
-    ctx.font = `bold ${titleSize}px Segoe UI`;
-    ctx.fillText(title, centerX, y);
+        ctx.fillStyle = '#ffffff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(k, cx + capW * 0.5, y + capH * 0.52);
 
-    y += lineGap;
-    ctx.strokeStyle = '#34506e';
+        cx += capW;
+        if (i < keys.length - 1) {
+          ctx.font = `700 ${Math.max(10, keyFont - 1)}px Segoe UI`;
+          ctx.fillStyle = '#bfd0e8';
+          ctx.fillText('/', cx + sepW * 0.5, y + capH * 0.52);
+          cx += sepW;
+        }
+      }
+      return { width: cx - x, height: capH };
+    }
+
+    // Backdrop + vignette
+    const vignette = ctx.createRadialGradient(W * 0.5, H * 0.5, Math.min(W, H) * 0.2, W * 0.5, H * 0.5, Math.max(W, H) * 0.65);
+    vignette.addColorStop(0, 'rgba(2,7,14,0.35)');
+    vignette.addColorStop(1, 'rgba(0,0,0,0.78)');
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, W, H);
+
+    roundedRectPath(panelX, panelY, panelW, panelH, Math.floor(clamp(22 * uiScale, 12, 28)));
+    ctx.fillStyle = 'rgba(8, 14, 24, 0.9)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(180, 205, 235, 0.4)';
     ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(panelX + 34, y + 1);
-    ctx.lineTo(panelX + panelW - 34, y + 1);
     ctx.stroke();
 
-    y += lineGap;
-    ctx.font = `bold ${bodySize}px Segoe UI`;
-    for (const line of lines) {
-      y += rowH;
-      if (!line) continue;
-      ctx.fillText(line, centerX, y);
+    const colPad = Math.floor(clamp(28 * uiScale, 14, 36));
+    const contentX = panelX + colPad;
+    const contentW = panelW - colPad * 2;
+    let y = panelY + colPad;
+
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `800 ${titleSize}px Segoe UI`;
+    ctx.fillText('SPACE RECYCLE HERO', contentX, y);
+    y += titleSize + Math.floor(clamp(6 * uiScale, 4, 10));
+
+    ctx.fillStyle = '#9ce8ff';
+    ctx.font = `700 ${subtitleSize}px Segoe UI`;
+    ctx.fillText('MISSION CONTROLS', contentX, y);
+    y += subtitleSize + Math.floor(clamp(10 * uiScale, 8, 14));
+
+    ctx.strokeStyle = 'rgba(120, 170, 220, 0.45)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(contentX, y);
+    ctx.lineTo(contentX + contentW, y);
+    ctx.stroke();
+    y += Math.floor(clamp(14 * uiScale, 10, 18));
+
+    const lineH = Math.floor(clamp(bodySize * 1.35, 15, 30));
+    for (const line of storyBlurb) {
+      y = drawWrappedText(line, contentX, y, contentW, lineH);
+    }
+    y += Math.floor(clamp(8 * uiScale, 6, 12));
+
+    function drawBulletSection(title, bullets) {
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `700 ${sectionSize}px Segoe UI`;
+      ctx.fillText(title, contentX, y);
+      y += sectionSize + Math.floor(clamp(5 * uiScale, 4, 9));
+
+      for (const b of bullets) {
+        ctx.fillStyle = '#8ce5ff';
+        ctx.font = `700 ${Math.max(10, bodySize)}px Segoe UI`;
+        ctx.fillText('•', contentX, y + 1);
+        y = drawWrappedText(b, contentX + Math.floor(clamp(16 * uiScale, 10, 20)), y, contentW - Math.floor(clamp(16 * uiScale, 10, 20)), lineH, '#d9e7f8', `500 ${bodySize}px Segoe UI`);
+      }
+      y += Math.floor(clamp(6 * uiScale, 4, 10));
     }
 
-    ctx.restore();
+    drawBulletSection('How to Play', howToPlay);
+    drawBulletSection('Tips', tips);
+
+    ctx.strokeStyle = 'rgba(120, 170, 220, 0.45)';
+    ctx.beginPath();
+    ctx.moveTo(contentX, y);
+    ctx.lineTo(contentX + contentW, y);
+    ctx.stroke();
+    y += Math.floor(clamp(14 * uiScale, 10, 18));
+
+    // Controls grid
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `700 ${sectionSize}px Segoe UI`;
+    ctx.fillText('Controls', contentX, y);
+    y += sectionSize + Math.floor(clamp(8 * uiScale, 6, 12));
+
+    const keyColW = clamp(contentW * 0.34, 170, 310);
+    const descX = contentX + keyColW + Math.floor(clamp(16 * uiScale, 10, 24));
+    const descW = contentW - keyColW - Math.floor(clamp(16 * uiScale, 10, 24));
+
+    for (const row of controls) {
+      const cap = drawKeycaps(row.keys, contentX, y);
+      const descLineH = Math.floor(clamp(bodySize * 1.3, 14, 28));
+      const descYEnd = drawWrappedText(row.text, descX, y + Math.max(1, Math.floor((cap.height - descLineH) * 0.25)), descW, descLineH, '#f0f5ff', `600 ${bodySize}px Segoe UI`);
+      y = Math.max(y + cap.height, descYEnd) + Math.floor(clamp(8 * uiScale, 5, 10));
+      if (y > panelY + panelH - Math.floor(clamp(42 * uiScale, 24, 56))) break;
+    }
+
+    y += Math.floor(clamp(4 * uiScale, 2, 8));
+    drawWrappedText('Land gently on skids, refuel pads refill fuel, and recycle pads score delivered cargo.', contentX, y, contentW, Math.floor(clamp(bodySize * 1.3, 14, 28)), '#bfe8c8', `600 ${bodySize}px Segoe UI`);
   }
+
 
 
 
@@ -2462,21 +2601,7 @@
     drawBottomConsole();
 
     if (game.showHelp) {
-      drawLeftInfoPanel('MISSION CONTROLS', [
-        'A / D — Rotate the ship left or right while flying.',
-        'W / S — Increase or decrease engine throttle.',
-        'SPACE — Start mission, then open or close the cargo tray.',
-        'K / L — Rotate the arm base counterclockwise / clockwise.',
-        'I / O — Move arm segment 1 up / down.',
-        'N / M — Move arm segment 2 up / down.',
-        ', / . — Close or open the claw to grab cargo.',
-        'F — Fold arm down for flight / unfold arm for cargo use.',
-        'E — Extend or retract landing gear (2-second movement).',
-        'Q — Toggle track mode when landed and stable.',
-        'H — Show/hide this help panel. ESC — Pause/unpause.',
-        'Land gently on skids, refuel pads refill fuel,',
-        'and recycle pads score delivered cargo.',
-      ]);
+      drawMissionHelpPanel();
     }
 
   }
