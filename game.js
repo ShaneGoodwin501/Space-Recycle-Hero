@@ -28,7 +28,7 @@
     baseRate: 47.5 * Math.PI / 180,
     seg1Rate: 55 * Math.PI / 180,
     seg2Rate: 55 * Math.PI / 180,
-    armFoldRate: 3.8,
+    armFoldDurationSec: 3,
 
     worldWidth: 260,
     terrainStep: 2,
@@ -1056,19 +1056,35 @@
       ship.invincibleTimer = Math.max(ship.invincibleTimer, 0.2);
     }
 
-    ship.armFoldBlend = moveTowards(ship.armFoldBlend, ship.armFolded ? 1 : 0, CONFIG.armFoldRate * dt);
-    const foldedPose = {
-      // Swing toward front/top-center, then compact tightly for flight.
-      baseAngle: 4 * Math.PI / 180,
+    ship.armFoldBlend = moveTowards(ship.armFoldBlend, ship.armFolded ? 1 : 0, dt / CONFIG.armFoldDurationSec);
+    const verticalPose = {
+      // Step 1: raise arm to an upright vertical pose.
+      baseAngle: 0,
       seg1Angle: Math.PI / 2,
       seg2Angle: Math.PI / 2,
+      clawOpen: 0.3,
+    };
+    const stowedPose = {
+      // Step 2: fold the raised arm down into the ship body.
+      baseAngle: 2 * Math.PI / 180,
+      seg1Angle: Math.PI,
+      seg2Angle: Math.PI,
       clawOpen: 0.02,
     };
     if (ship.armFolded || ship.armFoldBlend > 0.001) {
-      ship.baseAngle = lerp(ship.armDeployPose.baseAngle, foldedPose.baseAngle, ship.armFoldBlend);
-      ship.seg1Angle = lerp(ship.armDeployPose.seg1Angle, foldedPose.seg1Angle, ship.armFoldBlend);
-      ship.seg2Angle = lerp(ship.armDeployPose.seg2Angle, foldedPose.seg2Angle, ship.armFoldBlend);
-      ship.clawOpen = lerp(ship.armDeployPose.clawOpen, foldedPose.clawOpen, ship.armFoldBlend);
+      if (ship.armFoldBlend <= 0.5) {
+        const tFoldUp = ship.armFoldBlend / 0.5;
+        ship.baseAngle = lerp(ship.armDeployPose.baseAngle, verticalPose.baseAngle, tFoldUp);
+        ship.seg1Angle = lerp(ship.armDeployPose.seg1Angle, verticalPose.seg1Angle, tFoldUp);
+        ship.seg2Angle = lerp(ship.armDeployPose.seg2Angle, verticalPose.seg2Angle, tFoldUp);
+        ship.clawOpen = lerp(ship.armDeployPose.clawOpen, verticalPose.clawOpen, tFoldUp);
+      } else {
+        const tStow = (ship.armFoldBlend - 0.5) / 0.5;
+        ship.baseAngle = lerp(verticalPose.baseAngle, stowedPose.baseAngle, tStow);
+        ship.seg1Angle = lerp(verticalPose.seg1Angle, stowedPose.seg1Angle, tStow);
+        ship.seg2Angle = lerp(verticalPose.seg2Angle, stowedPose.seg2Angle, tStow);
+        ship.clawOpen = lerp(verticalPose.clawOpen, stowedPose.clawOpen, tStow);
+      }
     }
 
     const trayTarget = ship.trayExtended ? 1 : 0;
@@ -1968,7 +1984,7 @@
 
     // Crane segments
     const base = shipShape.craneBase;
-    if (ship.armFoldBlend > 0.92) {
+    if (ship.armFolded && ship.armFoldBlend > 0.995) {
       // Flight-compact visual: arm appears as a small red square on top center.
       const box = 0.17 * m;
       ctx.fillStyle = '#ff2f2f';
