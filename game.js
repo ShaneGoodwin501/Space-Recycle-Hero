@@ -28,6 +28,7 @@
     baseRate: 47.5 * Math.PI / 180,
     seg1Rate: 55 * Math.PI / 180,
     seg2Rate: 55 * Math.PI / 180,
+    armFoldRate: 3.8,
 
     worldWidth: 260,
     terrainStep: 2,
@@ -86,7 +87,7 @@
   resize();
 
   const keys = new Set();
-  const blocked = new Set(['KeyW','KeyA','KeyS','KeyD','KeyI','KeyO','KeyK','KeyL','KeyN','KeyM','Comma','Period','Space','Escape','KeyH','KeyQ','KeyE']);
+  const blocked = new Set(['KeyW','KeyA','KeyS','KeyD','KeyI','KeyO','KeyK','KeyL','KeyN','KeyM','Comma','Period','Space','Escape','KeyH','KeyQ','KeyE','KeyF']);
   function unlockAudioFromUserGesture() {
     initAudio();
     if (game.audio?.ctx && game.audio.ctx.state !== 'running') game.audio.ctx.resume();
@@ -128,6 +129,20 @@
         ship.tracksExtended = false;
         ship.gearExtended = true;
         ship.gearSafetyTimer = CONFIG.landingGearTransitionSec + 0.35;
+      }
+    }
+    if (e.code === 'KeyF' && game.state === 'PLAYING') {
+      const togglingToFolded = !ship.armFolded;
+      ship.armFolded = togglingToFolded;
+      if (togglingToFolded) {
+        ship.armDeployPose.baseAngle = ship.baseAngle;
+        ship.armDeployPose.seg1Angle = ship.seg1Angle;
+        ship.armDeployPose.seg2Angle = ship.seg2Angle;
+        ship.armDeployPose.clawOpen = ship.clawOpen;
+        if (ship.grabbedCargo) {
+          ship.grabbedCargo.grabbed = false;
+          ship.grabbedCargo = null;
+        }
       }
     }
     if (e.code === 'Escape' && game.state !== 'CRASHED' && game.state !== 'READY') {
@@ -298,6 +313,14 @@
     gearExtended: false,
     gearDeploy: 0,
     gearSafetyTimer: 0,
+    armFolded: false,
+    armFoldBlend: 0,
+    armDeployPose: {
+      baseAngle: 0,
+      seg1Angle: 2.9,
+      seg2Angle: 3.05,
+      clawOpen: 1,
+    },
   };
 
   function shipMass() {
@@ -547,13 +570,19 @@
     ship.bounceCount = 0;
     ship.settleLock = false;
     ship.invincibleTimer = 0;
-    ship.trayExtended = true;
-    ship.traySlide = 1;
+    ship.trayExtended = false;
+    ship.traySlide = 0;
     ship.tracksExtended = false;
     ship.tracksDeploy = 0;
     ship.gearExtended = true;
     ship.gearDeploy = 1;
     ship.gearSafetyTimer = 0;
+    ship.armFolded = false;
+    ship.armFoldBlend = 0;
+    ship.armDeployPose.baseAngle = ship.baseAngle;
+    ship.armDeployPose.seg1Angle = ship.seg1Angle;
+    ship.armDeployPose.seg2Angle = ship.seg2Angle;
+    ship.armDeployPose.clawOpen = ship.clawOpen;
     ship.angle = 0;
     ship.av = 0;
     randomizeWorld();
@@ -768,6 +797,12 @@
     ship.gearExtended = false;
     ship.gearDeploy = 0;
     ship.gearSafetyTimer = 0;
+    ship.armFolded = false;
+    ship.armFoldBlend = 0;
+    ship.armDeployPose.baseAngle = ship.baseAngle;
+    ship.armDeployPose.seg1Angle = ship.seg1Angle;
+    ship.armDeployPose.seg2Angle = ship.seg2Angle;
+    ship.armDeployPose.clawOpen = ship.clawOpen;
     setShipOnGround();
     game.camera.x = ship.x;
     game.camera.y = ship.y - 6;
@@ -795,14 +830,21 @@
       ship.throttle = 0;
     }
 
-    if (keys.has('KeyK')) ship.baseAngle -= CONFIG.baseRate * dt;
-    if (keys.has('KeyL')) ship.baseAngle += CONFIG.baseRate * dt;
-    if (keys.has('KeyI')) ship.seg1Angle -= CONFIG.seg1Rate * dt;
-    if (keys.has('KeyO')) ship.seg1Angle += CONFIG.seg1Rate * dt;
-    if (keys.has('KeyN')) ship.seg2Angle -= CONFIG.seg2Rate * dt;
-    if (keys.has('KeyM')) ship.seg2Angle += CONFIG.seg2Rate * dt;
-    if (keys.has('Comma')) ship.clawOpen = clamp(ship.clawOpen - CONFIG.clawRate * dt, 0, 1);
-    if (keys.has('Period')) ship.clawOpen = clamp(ship.clawOpen + CONFIG.clawRate * dt, 0, 1);
+    const armControlLocked = ship.armFolded || ship.armFoldBlend > 0.02;
+    if (!armControlLocked) {
+      if (keys.has('KeyK')) ship.baseAngle -= CONFIG.baseRate * dt;
+      if (keys.has('KeyL')) ship.baseAngle += CONFIG.baseRate * dt;
+      if (keys.has('KeyI')) ship.seg1Angle -= CONFIG.seg1Rate * dt;
+      if (keys.has('KeyO')) ship.seg1Angle += CONFIG.seg1Rate * dt;
+      if (keys.has('KeyN')) ship.seg2Angle -= CONFIG.seg2Rate * dt;
+      if (keys.has('KeyM')) ship.seg2Angle += CONFIG.seg2Rate * dt;
+      if (keys.has('Comma')) ship.clawOpen = clamp(ship.clawOpen - CONFIG.clawRate * dt, 0, 1);
+      if (keys.has('Period')) ship.clawOpen = clamp(ship.clawOpen + CONFIG.clawRate * dt, 0, 1);
+      ship.armDeployPose.baseAngle = ship.baseAngle;
+      ship.armDeployPose.seg1Angle = ship.seg1Angle;
+      ship.armDeployPose.seg2Angle = ship.seg2Angle;
+      ship.armDeployPose.clawOpen = ship.clawOpen;
+    }
 
     ship.baseAngle = clamp(ship.baseAngle, -120 * Math.PI/180, 120 * Math.PI/180);
     // Segment joints are intentionally unbounded for full 360° continuous control.
@@ -847,6 +889,21 @@
     if (ship.landed && recyclePadUnderShip) {
       ship.invincibleTimer = Math.max(ship.invincibleTimer, 0.2);
     }
+
+    ship.armFoldBlend = moveTowards(ship.armFoldBlend, ship.armFolded ? 1 : 0, CONFIG.armFoldRate * dt);
+    const foldedPose = {
+      baseAngle: -118 * Math.PI / 180,
+      seg1Angle: 0.42,
+      seg2Angle: 0.38,
+      clawOpen: 0.05,
+    };
+    if (ship.armFolded || ship.armFoldBlend > 0.001) {
+      ship.baseAngle = lerp(ship.armDeployPose.baseAngle, foldedPose.baseAngle, ship.armFoldBlend);
+      ship.seg1Angle = lerp(ship.armDeployPose.seg1Angle, foldedPose.seg1Angle, ship.armFoldBlend);
+      ship.seg2Angle = lerp(ship.armDeployPose.seg2Angle, foldedPose.seg2Angle, ship.armFoldBlend);
+      ship.clawOpen = lerp(ship.armDeployPose.clawOpen, foldedPose.clawOpen, ship.armFoldBlend);
+    }
+
     const trayTarget = ship.trayExtended ? 1 : 0;
     ship.traySlide = lerp(ship.traySlide, trayTarget, clamp(8 * dt, 0, 1));
     const mass = shipMass();
@@ -2070,6 +2127,7 @@
         'I / O — Move arm segment 1 up / down.',
         'N / M — Move arm segment 2 up / down.',
         ', / . — Close or open the claw to grab cargo.',
+        'F — Fold arm down for flight / unfold arm for cargo use.',
         'E — Extend or retract landing gear (2-second movement).',
         'Q — Toggle track mode when landed and stable.',
         'H — Show/hide this help panel. ESC — Pause/unpause.',
