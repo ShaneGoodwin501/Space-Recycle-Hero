@@ -892,9 +892,10 @@
 
     ship.armFoldBlend = moveTowards(ship.armFoldBlend, ship.armFolded ? 1 : 0, CONFIG.armFoldRate * dt);
     const foldedPose = {
-      baseAngle: -118 * Math.PI / 180,
-      seg1Angle: 0.42,
-      seg2Angle: 0.38,
+      // Fold flat on top: first segment extends horizontally, second folds back over it.
+      baseAngle: 90 * Math.PI / 180,
+      seg1Angle: 270 * Math.PI / 180,
+      seg2Angle: 90 * Math.PI / 180,
       clawOpen: 0.05,
     };
     if (ship.armFolded || ship.armFoldBlend > 0.001) {
