@@ -1597,21 +1597,23 @@
     ctx.fillStyle = '#02030b';
     ctx.fillRect(0, 0, W, H);
 
-    // Static background set pieces: ISS only (visual, non-interactive).
+    // Animated background set pieces: floating ISS and decorative UFOs (visual only, non-interactive).
+    const bgTime = performance.now() * 0.001;
     const shipDiameterPx = shipShape.hullRadius * CONFIG.METER_TO_PX * 2;
 
-    const issX = W * 0.57 - game.camera.x * 0.065 * CONFIG.METER_TO_PX;
-    const issY = H * 0.1 - game.camera.y * 0.03 * CONFIG.METER_TO_PX;
     const issScale = Math.max(0.8, Math.min(1.25, shipDiameterPx / 50));
+    const issAnchorX = W * 0.57 - game.camera.x * 0.065 * CONFIG.METER_TO_PX;
+    const issAnchorY = H * 0.1 - game.camera.y * 0.03 * CONFIG.METER_TO_PX;
+    const issX = issAnchorX + Math.sin(bgTime * 0.17) * Math.min(42, W * 0.035) + Math.sin(bgTime * 0.071 + 1.4) * 14;
+    const issY = issAnchorY + Math.cos(bgTime * 0.13 + 0.8) * Math.min(20, H * 0.025) + Math.sin(bgTime * 0.23) * 6;
     ctx.save();
     ctx.translate(issX, issY);
-    ctx.rotate(Math.sin(performance.now() * 0.0002) * 0.06 - 0.08);
+    ctx.rotate(Math.sin(bgTime * 0.2) * 0.06 - 0.08);
     ctx.globalAlpha = 0.88;
     ctx.fillStyle = '#9fb0c7';
     ctx.fillRect(-8 * issScale, -3 * issScale, 16 * issScale, 6 * issScale);
     ctx.fillStyle = '#6d7f98';
     ctx.fillRect(-4 * issScale, -7 * issScale, 8 * issScale, 14 * issScale);
-    // Expanded ISS solar arrays: multiple horizontal panel sections on both sides.
     ctx.fillStyle = '#4f7cc5';
     const panelW = 10 * issScale;
     const panelH = 33 * issScale;
@@ -1631,6 +1633,45 @@
       ctx.strokeRect(rightX, -16.5 * issScale, panelW, panelH);
     }
     ctx.restore();
+
+    const ufoBaseScale = Math.max(0.76, Math.min(1.12, shipDiameterPx / 58));
+    for (let i = 0; i < 4; i++) {
+      const anchorX = W * (0.13 + i * 0.22) - game.camera.x * CONFIG.METER_TO_PX * (0.035 + i * 0.004);
+      const anchorY = H * (0.16 + (i % 2) * 0.12 + i * 0.04) - game.camera.y * CONFIG.METER_TO_PX * 0.018;
+      const bobX = Math.sin(bgTime * (0.11 + i * 0.02) + i * 1.7) * (24 + i * 8);
+      const bobY = Math.cos(bgTime * (0.16 + i * 0.018) + i * 0.9) * (9 + i * 2.7);
+      const x = anchorX + bobX;
+      const y = anchorY + bobY;
+      const scale = ufoBaseScale * (0.76 + (i % 3) * 0.17);
+
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(Math.sin(bgTime * (0.45 + i * 0.07) + i) * 0.03);
+      ctx.globalAlpha = 0.66;
+      ctx.fillStyle = '#89f4ff';
+      ctx.beginPath();
+      ctx.ellipse(0, -2.4 * scale, 4.8 * scale, 2.2 * scale, 0, Math.PI, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#a8b6d6';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 10.5 * scale, 3.3 * scale, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#dde6ff';
+      ctx.beginPath();
+      ctx.arc(-3.8 * scale, 0.2 * scale, 0.9 * scale, 0, Math.PI * 2);
+      ctx.arc(0, 0.2 * scale, 0.9 * scale, 0, Math.PI * 2);
+      ctx.arc(3.8 * scale, 0.2 * scale, 0.9 * scale, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 0.22;
+      ctx.fillStyle = '#8cf5ff';
+      ctx.beginPath();
+      ctx.moveTo(-1.8 * scale, 2.1 * scale);
+      ctx.lineTo(0, 9.8 * scale);
+      ctx.lineTo(1.8 * scale, 2.1 * scale);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
 
     for (const p of planets) {
       const px = (p.x - game.camera.x * 0.08) * CONFIG.METER_TO_PX + W / 2;
