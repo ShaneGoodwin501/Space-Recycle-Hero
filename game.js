@@ -678,14 +678,19 @@
     trackEngineGain.gain.value = 0;
     const trackEngine = ctxA.createOscillator();
     trackEngine.type = 'sawtooth';
-    trackEngine.frequency.value = 64;
+    trackEngine.frequency.value = 42;
+    const trackEngineSub = ctxA.createOscillator();
+    trackEngineSub.type = 'triangle';
+    trackEngineSub.frequency.value = 28;
     const trackEngineFilter = ctxA.createBiquadFilter();
     trackEngineFilter.type = 'lowpass';
-    trackEngineFilter.frequency.value = 420;
+    trackEngineFilter.frequency.value = 300;
     trackEngine.connect(trackEngineFilter);
+    trackEngineSub.connect(trackEngineFilter);
     trackEngineFilter.connect(trackEngineGain);
     trackEngineGain.connect(master);
     trackEngine.start();
+    trackEngineSub.start();
 
     game.audio = {
       ctx: ctxA,
@@ -697,6 +702,7 @@
       hydro,
       hydroGain,
       trackEngine,
+      trackEngineSub,
       trackEngineGain,
       trackEngineFilter,
       lastThudTime: -10,
@@ -832,10 +838,17 @@
 
     const trackModeActive = playing && ship.tracksDeploy > 0.55;
     const trackSpeed = Math.abs(ship.vx);
-    const targetTrackGain = trackModeActive ? (0.03 + Math.min(0.13, trackSpeed * 0.11)) : 0;
-    a.trackEngineGain.gain.setTargetAtTime(targetTrackGain, t, 0.06);
-    a.trackEngine.frequency.setTargetAtTime(62 + Math.min(95, trackSpeed * 65), t, 0.07);
-    a.trackEngineFilter.frequency.setTargetAtTime(trackModeActive ? (350 + Math.min(900, trackSpeed * 420)) : 280, t, 0.08);
+    // Low V8-style bed with lumpy-cam style idle pulse.
+    const lumpy = 0.6 + 0.4 * Math.sin(t * 17) * Math.sin(t * 7.5);
+    const idleBase = 28;
+    const driveAdd = Math.min(38, trackSpeed * 22);
+    const mainFreq = idleBase + driveAdd + lumpy * 2.2;
+    const subFreq = Math.max(18, mainFreq * 0.62 + Math.sin(t * 9.5) * 1.2);
+    const targetTrackGain = trackModeActive ? (0.045 + Math.min(0.16, trackSpeed * 0.12) + lumpy * 0.01) : 0;
+    a.trackEngineGain.gain.setTargetAtTime(targetTrackGain, t, 0.045);
+    a.trackEngine.frequency.setTargetAtTime(mainFreq, t, 0.055);
+    a.trackEngineSub.frequency.setTargetAtTime(subFreq, t, 0.06);
+    a.trackEngineFilter.frequency.setTargetAtTime(trackModeActive ? (220 + Math.min(520, trackSpeed * 240) + lumpy * 45) : 180, t, 0.06);
 
     a.master.gain.setTargetAtTime(playing ? 0.24 : 0.1, t, 0.08);
   }
