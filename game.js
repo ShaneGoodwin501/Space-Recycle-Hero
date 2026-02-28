@@ -1297,6 +1297,7 @@
 
   function updateCargo(dt) {
     const arm = getArmKinematics();
+    const armDormant = ship.armFolded || ship.armFoldBlend >= 0.72;
 
     if (ship.grabbedCargo) {
       const c = cargos.find(k => k.id === ship.grabbedCargo);
@@ -1309,13 +1310,13 @@
         c.vy = ship.vy;
       }
 
-      if (ship.clawOpen > 0.82) {
+      if (ship.clawOpen > 0.82 || armDormant) {
         if (c) c.grabbed = false;
         ship.grabbedCargo = null;
       }
     } else {
       // Pick when claw is mostly closed and target near tip.
-      if (ship.clawOpen < 0.2) {
+      if (!armDormant && ship.clawOpen < 0.2) {
         let pick = null;
         let best = 0.45;
         for (const c of cargos) {
