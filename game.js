@@ -31,7 +31,7 @@
 
     worldWidth: 260,
     terrainStep: 2,
-    starCount: 408,
+    starCount: 1632,
     planetCount: 8,
 
     cameraSmooth: 4,
@@ -46,7 +46,7 @@
     trackDeployRate: 5.5,
     trackDriveAccel: 4.8,
     trackDriveMaxSpeed: 1.35,
-    landingGearRate: 5.2,
+    landingGearTransitionSec: 2,
   };
 
   const canvas = document.getElementById('gameCanvas');
@@ -54,6 +54,8 @@
 
   let W = 1280;
   let H = 720;
+  let stars = [];
+  let planets = [];
 
   function resize() {
     const dpr = Math.max(1, window.devicePixelRatio || 1);
@@ -64,6 +66,7 @@
     canvas.style.width = `${W}px`;
     canvas.style.height = `${H}px`;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (stars.length) regenerateStars();
   }
 
   function getConsoleHeight() {
@@ -110,7 +113,8 @@
     if (e.code === 'KeyE' && game.state === 'PLAYING') {
       const tracksMode = ship.tracksExtended || ship.tracksDeploy > 0.05;
       if (!tracksMode) {
-        ship.gearExtended = !ship.gearExtended;
+        if (!ship.landed) ship.gearExtended = !ship.gearExtended;
+        else ship.gearExtended = true;
       }
     }
     if (e.code === 'KeyQ' && game.state === 'PLAYING') {
@@ -123,7 +127,7 @@
       } else if (canToggleOff) {
         ship.tracksExtended = false;
         ship.gearExtended = true;
-        ship.gearSafetyTimer = 1.2;
+        ship.gearSafetyTimer = CONFIG.landingGearTransitionSec + 0.35;
       }
     }
     if (e.code === 'Escape' && game.state !== 'CRASHED' && game.state !== 'READY') {
@@ -139,6 +143,10 @@
 
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const lerp = (a, b, t) => a + (b - a) * t;
+  const moveTowards = (value, target, maxDelta) => {
+    if (Math.abs(target - value) <= maxDelta) return target;
+    return value + Math.sign(target - value) * maxDelta;
+  };
 
   function rotate(v, a) {
     const c = Math.cos(a), s = Math.sin(a);
@@ -219,13 +227,11 @@
   }
 
   let terrain = generateTerrain();
-  let stars = [];
-  let planets = [];
 
   function regenerateStars() {
     stars = Array.from({ length: CONFIG.starCount }, () => ({
-      x: Math.random() * CONFIG.worldWidth,
-      y: Math.random() * 85 - 18,
+      x: Math.random() * (W + 80) - 40,
+      y: Math.random() * (getGameplayHeight() * 0.9) + 6,
       r: Math.random() * 1.8 + 0.2,
       a: Math.random() * 0.72 + 0.18,
     }));
@@ -810,26 +816,26 @@
     const swapToTracks = ship.tracksExtended;
     const modeTransitionActive = swapToTracks
       ? (ship.gearDeploy > 0.001 || ship.tracksDeploy < 0.999)
-      : (ship.tracksDeploy > 0.001 || ship.gearDeploy < 0.999);
+      : (ship.tracksDeploy > 0.001);
 
     const swapRate = CONFIG.trackDeployRate * (modeTransitionActive ? 0.5 : 1);
     if (swapToTracks) {
       // Entering vehicle mode sequence: gear retracts first, then tracks extend.
       const gearStepDone = ship.gearDeploy <= 0.02;
-      ship.gearDeploy = lerp(ship.gearDeploy, 0, clamp(swapRate * dt, 0, 1));
+      ship.gearDeploy = moveTowards(ship.gearDeploy, 0, dt / CONFIG.landingGearTransitionSec);
       if (gearStepDone) ship.tracksDeploy = lerp(ship.tracksDeploy, 1, clamp(swapRate * dt, 0, 1));
       else ship.tracksDeploy = lerp(ship.tracksDeploy, 0, clamp(swapRate * dt, 0, 1));
     } else {
-      // Exiting vehicle mode sequence: tracks retract first, then gear extends.
+      // Exiting vehicle mode sequence: tracks retract first, then gear follows manual target.
       const trackStepDone = ship.tracksDeploy <= 0.02;
       ship.tracksDeploy = lerp(ship.tracksDeploy, 0, clamp(swapRate * dt, 0, 1));
-      if (trackStepDone) ship.gearDeploy = lerp(ship.gearDeploy, 1, clamp(swapRate * dt, 0, 1));
-      else ship.gearDeploy = lerp(ship.gearDeploy, 0, clamp(swapRate * dt, 0, 1));
+      if (trackStepDone) ship.gearDeploy = moveTowards(ship.gearDeploy, ship.gearExtended ? 1 : 0, dt / CONFIG.landingGearTransitionSec);
+      else ship.gearDeploy = moveTowards(ship.gearDeploy, 0, dt / CONFIG.landingGearTransitionSec);
     }
 
     // Manual gear toggle outside track mode.
     if (!modeTransitionActive && !ship.tracksExtended) {
-      ship.gearDeploy = lerp(ship.gearDeploy, ship.gearExtended ? 1 : 0, clamp(CONFIG.landingGearRate * dt, 0, 1));
+      ship.gearDeploy = moveTowards(ship.gearDeploy, ship.gearExtended ? 1 : 0, dt / CONFIG.landingGearTransitionSec);
     }
 
     // Ensure transitions fully complete (avoid asymptotic lingering).
@@ -944,7 +950,7 @@
     }
 
     const supportSwapActive = (ship.tracksExtended && (ship.gearDeploy > 0.02 || ship.tracksDeploy < 0.98))
-      || (!ship.tracksExtended && (ship.tracksDeploy > 0.02 || ship.gearDeploy < 0.98));
+      || (!ship.tracksExtended && (ship.tracksDeploy > 0.02 || (ship.gearExtended && ship.gearDeploy < 0.98)));
     if (hasSkid && !tracksDriving && !supportSwapActive && ship.gearSafetyTimer <= 0 && ship.gearDeploy < 0.85) {
       return crashShip('no-landing-gear');
     }
@@ -987,6 +993,8 @@
     }
 
     if (!tracksDriving && hullHitTerrain && !hasSkid) {
+      if (ship.gearDeploy < 0.85) return crashShip('retracted-gear-ground-impact');
+
       const crashV = CONFIG.landingMaxVY * CONFIG.impactRobustness;
       const crashSpeed = CONFIG.landingMaxSpeed * CONFIG.impactRobustness;
       if (Math.abs(ship.vy) > crashV || speed > crashSpeed) return crashShip('hull-terrain');
@@ -999,6 +1007,13 @@
     }
 
     ship.landed = (tracksDriving && hasSkid) || (hasSkid && angleOk && speedOk && (verticalOk || ship.settleLock)) || (!tracksDriving && hullHitTerrain && speed < CONFIG.landingMaxSpeed * CONFIG.impactRobustness);
+    const liftOffRequested = !tracksDriving && !tracksLock && ship.throttle >= 0.2 && ship.fuel > 0;
+    if (ship.landed && liftOffRequested) {
+      ship.landed = false;
+      ship.settleLock = false;
+      ship.bounceCount = 0;
+      ship.vy = Math.min(ship.vy, -0.35);
+    }
     if (tracksDriving && ship.landed) {
       ship.angle = lerp(ship.angle, 0, clamp(8 * dt, 0, 1));
       ship.av *= 0.4;
@@ -1013,12 +1028,29 @@
         ship.vy = 0;
         ship.vx *= 0.985;
         ship.av *= 0.25;
+        const ground = Math.min(terrainY(skidL.x) - supportLLocal.y, terrainY(skidR.x) - supportRLocal.y);
+        ship.y = ground;
       } else {
         ship.vx *= 0.93;
-        ship.av *= 0.85;
+        ship.av *= 0.55;
+
+        // Settle to slope so both landing feet sit on terrain without popping.
+        const skidBaseLX = clamp(ship.x + supportLLocal.x, 0, CONFIG.worldWidth);
+        const skidBaseRX = clamp(ship.x + supportRLocal.x, 0, CONFIG.worldWidth);
+        const gyL = terrainY(skidBaseLX);
+        const gyR = terrainY(skidBaseRX);
+        const targetAngle = Math.atan2(gyR - gyL, Math.max(0.001, skidBaseRX - skidBaseLX));
+        ship.angle = lerp(ship.angle, targetAngle, clamp(10 * dt, 0, 1));
+        ship.av *= 0.45;
+
+        const settledSkidL = worldFromLocal(ship, supportLLocal);
+        const settledSkidR = worldFromLocal(ship, supportRLocal);
+        const dL = terrainY(settledSkidL.x) - settledSkidL.y;
+        const dR = terrainY(settledSkidR.x) - settledSkidR.y;
+        const yAdjust = clamp((dL + dR) * 0.5, -0.12, 0.12);
+        ship.y += yAdjust;
+        ship.vy = 0;
       }
-      const ground = Math.min(terrainY(skidL.x) - supportLLocal.y, terrainY(skidR.x) - supportRLocal.y);
-      ship.y = tracksDriving ? ground : Math.min(ship.y, ground);
     }
 
     // Refuel only with safe skid landing on refuel pad.
@@ -1320,10 +1352,12 @@
       ctx.stroke();
     }
 
+    const starWrapW = W + 80;
+    const starParallaxShift = game.camera.x * CONFIG.METER_TO_PX * 0.12;
     for (const s of stars) {
-      const parallaxX = (s.x - game.camera.x * 0.12) * CONFIG.METER_TO_PX + W / 2;
-      const parallaxY = (s.y - game.camera.y * 0.05) * CONFIG.METER_TO_PX + H * 0.18;
-      if (parallaxX < -4 || parallaxX > W + 4 || parallaxY < -4 || parallaxY > H + 4) continue;
+      const parallaxX = ((s.x - starParallaxShift + 40) % starWrapW + starWrapW) % starWrapW - 40;
+      const parallaxY = s.y - game.camera.y * CONFIG.METER_TO_PX * 0.02;
+      if (parallaxX < -4 || parallaxX > W + 4 || parallaxY < -6 || parallaxY > getGameplayHeight() + 6) continue;
       ctx.globalAlpha = s.a;
       ctx.fillStyle = '#fff';
       ctx.beginPath();
@@ -1504,13 +1538,19 @@
 
     // Tray retract/extend bay
     const tr = getTrayRect();
+    const trayVisualH = tr.h * 0.7; // 30% thinner drawer profile.
+    const trayVisualY = tr.y + (tr.h - trayVisualH) * 0.5;
+    const trayVisualW = shipShape.trayRect.w; // Keep drawer width fixed regardless of throttle/state.
+    const trayEdgeW = Math.max(4, Math.min(7, 0.12 * m));
+
     ctx.fillStyle = '#d5dbe6';
-    ctx.fillRect(tr.x * m, tr.y * m, tr.w * m, tr.h * m);
+    ctx.fillRect(tr.x * m, trayVisualY * m, trayVisualW * m, trayVisualH * m);
     ctx.strokeStyle = '#18202c';
-    ctx.strokeRect(tr.x * m, tr.y * m, tr.w * m, tr.h * m);
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(tr.x * m, trayVisualY * m, trayVisualW * m, trayVisualH * m);
     ctx.fillStyle = '#d5dbe6';
-    ctx.fillRect(tr.x * m, tr.y * m, 5, tr.h * m);
-    ctx.fillRect((tr.x + tr.w) * m - 5, tr.y * m, 5, tr.h * m);
+    ctx.fillRect(tr.x * m, trayVisualY * m, trayEdgeW, trayVisualH * m);
+    ctx.fillRect((tr.x + trayVisualW) * m - trayEdgeW, trayVisualY * m, trayEdgeW, trayVisualH * m);
 
     // Landing gear feet + support arms
     const supportLocals = getSupportLocals();
@@ -1520,14 +1560,16 @@
     const footW = 0.434 * m;
     const footH = 0.07 * m;
     const armTopY = (shipShape.skidL.y - 0.28) * m;
+    const retractedFootY = (shipShape.skidL.y - 0.3) * m;
 
     const leftFootCenterX = shipShape.skidL.x * m * 1.5;
     const rightFootCenterX = shipShape.skidR.x * m * 1.5;
-    const leftFootCenterY = footL.y * m;
-    const rightFootCenterY = footR.y * m;
+    const leftFootCenterY = lerp(retractedFootY, footL.y * m, ship.gearDeploy);
+    const rightFootCenterY = lerp(retractedFootY, footR.y * m, ship.gearDeploy);
+    const drawGearVisual = !ship.tracksExtended || ship.gearDeploy > 0.001 || ship.tracksDeploy < 0.999;
 
     // 45-degree support arms (one per side), rendered behind the hull.
-    if (ship.gearDeploy > 0.001) {
+    if (drawGearVisual) {
       const legDropL = Math.max(0, leftFootCenterY - armTopY);
       const legDropR = Math.max(0, rightFootCenterY - armTopY);
       const leftTopX = leftFootCenterX + legDropL;
@@ -1590,7 +1632,7 @@
     ctx.fillText('Recycle', 0, -0.16 * m);
     ctx.fillText('Hero', 0, 0.02 * m);
 
-    if (ship.gearDeploy > 0.001) {
+    if (drawGearVisual) {
       // Feet (bright red), centered at each leg endpoint.
       ctx.fillStyle = '#ff2a2a';
       ctx.fillRect(leftFootCenterX - footW * 0.5, leftFootCenterY - footH * 0.5, footW, footH);
@@ -1789,9 +1831,15 @@
     ctx.fillText('ATTITUDE', gx - 30, panelY + 16);
 
     const dX = attitudeX + attitudePanelW + gap;
-    const totalW = Math.max(280, W - dX - pad);
-    const scoreW = Math.min(220, Math.max(150, totalW * 0.3));
-    const distW = totalW - scoreW - gap;
+    const totalW = Math.max(420, W - dX - pad);
+    const scoreW = Math.min(220, Math.max(150, totalW * 0.23));
+
+    // 50% wider mini-map target than the original design.
+    const targetMapW = clamp(Math.floor(W * 0.33), 270, 420);
+    const minDistW = 180;
+    const maxMapW = Math.max(150, totalW - scoreW - gap * 2 - minDistW);
+    const mapW = Math.max(150, Math.min(targetMapW, maxMapW));
+    const distW = Math.max(minDistW, totalW - scoreW - mapW - gap * 2);
 
     ctx.fillStyle = '#000';
     ctx.fillRect(dX, panelY, distW, panelH);
@@ -1804,7 +1852,10 @@
     ctx.font = 'bold 44px "Consolas", monospace';
     ctx.fillText(`${dist.toFixed(1)} m`, dX + 12, panelY + panelH * 0.72);
 
-    const scoreX = dX + distW + gap;
+    const mapX = dX + distW + gap;
+    drawMiniMapInPanel(mapX, panelY, mapW, panelH);
+
+    const scoreX = mapX + mapW + gap;
     ctx.fillStyle = '#000';
     ctx.fillRect(scoreX, panelY, scoreW, panelH);
     ctx.strokeStyle = '#0b5';
@@ -1818,58 +1869,140 @@
 
 
 
+
+  function drawMiniMapInPanel(panelX, panelY, panelW, panelH) {
+    const mapPadX = 8;
+    const mapPadTop = 18;
+    const mapPadBottom = 8;
+    const mapX = panelX + mapPadX;
+    const mapY = panelY + mapPadTop;
+    const mapW = Math.max(60, panelW - mapPadX * 2);
+    const mapH = Math.max(36, panelH - mapPadTop - mapPadBottom);
+    const tm = terrainMetrics();
+    const mapTopWorldY = tm.minY - tm.height * 2.2;
+    const mapBottomWorldY = tm.maxY + 1.6;
+
+    const mapWorldX = (x) => mapX + (x / CONFIG.worldWidth) * mapW;
+    const mapWorldY = (y) => mapY + ((y - mapTopWorldY) / Math.max(0.01, mapBottomWorldY - mapTopWorldY)) * mapH;
+
+    ctx.fillStyle = '#000';
+    ctx.fillRect(panelX, panelY, panelW, panelH);
+    ctx.strokeStyle = '#0b5';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(panelX, panelY, panelW, panelH);
+
+    // Terrain profile and fill.
+    ctx.beginPath();
+    const first = terrain.points[0];
+    ctx.moveTo(mapWorldX(first.x), mapWorldY(first.y));
+    for (const pt of terrain.points) ctx.lineTo(mapWorldX(pt.x), mapWorldY(pt.y));
+    ctx.lineTo(mapX + mapW, mapY + mapH);
+    ctx.lineTo(mapX, mapY + mapH);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(110,120,138,0.55)';
+    ctx.fill();
+
+    ctx.strokeStyle = '#c5cfdf';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(mapWorldX(first.x), mapWorldY(first.y));
+    for (const pt of terrain.points) ctx.lineTo(mapWorldX(pt.x), mapWorldY(pt.y));
+    ctx.stroke();
+
+    for (const pad of terrain.pads) {
+      const px = mapWorldX(pad.x - pad.w * 0.5);
+      const pw = Math.max(3, (pad.w / CONFIG.worldWidth) * mapW);
+      const py = mapWorldY(pad.y) - 2;
+      ctx.fillStyle = pad.kind === 'recycle' ? '#72ff95' : '#78d8ff';
+      ctx.fillRect(px, py, pw, 4);
+    }
+
+    const shipX = mapWorldX(clamp(ship.x, 0, CONFIG.worldWidth));
+    const shipY = mapWorldY(clamp(ship.y, mapTopWorldY, mapBottomWorldY));
+    ctx.fillStyle = '#ff6b6b';
+    ctx.beginPath();
+    ctx.arc(shipX, shipY, 3.8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.fillStyle = '#7dff9c';
+    ctx.font = 'bold 12px Segoe UI';
+    ctx.textAlign = 'left';
+    ctx.fillText('MINI MAP', panelX + 8, panelY + 14);
+  }
+
+
   function drawLeftInfoPanel(title, lines) {
-    const panelW = Math.min(760, Math.max(360, Math.floor(W * 0.7)));
-    const panelH = Math.min(H - 40, Math.max(280, Math.floor(H * 0.74)));
+    const panelW = Math.min(860, Math.max(420, Math.floor(W * 0.8)));
+    const panelH = Math.min(H - 36, Math.max(320, Math.floor(H * 0.8)));
     const panelX = Math.floor((W - panelW) * 0.5);
     const panelY = Math.floor((H - panelH) * 0.5);
 
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
     ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = 'rgba(8,12,20,0.92)';
+    ctx.fillStyle = 'rgba(8,12,20,0.94)';
     ctx.fillRect(panelX, panelY, panelW, panelH);
     ctx.strokeStyle = '#2b2b2b';
     ctx.lineWidth = 2;
     ctx.strokeRect(panelX, panelY, panelW, panelH);
 
-    const padX = panelX + 22;
-    const padY = panelY + 20;
-    const maxW = panelW - 44;
+    const padX = panelX + 30;
+    const padY = panelY + 24;
+    const maxW = panelW - 60;
     const nonEmpty = lines.filter(Boolean);
 
-    let bodySize = 28;
-    for (; bodySize >= 12; bodySize -= 1) {
-      const titleSize = Math.round(bodySize * 1.45);
-      const lineGap = Math.max(4, Math.round(bodySize * 0.45));
-      const rowH = Math.round(bodySize * 1.28);
-      const titleH = Math.round(titleSize * 1.05);
-      const totalRowsH = titleH + lineGap + lines.length * rowH;
+    let bodySize = 26;
+    for (; bodySize >= 11; bodySize -= 1) {
+      const titleSize = Math.round(bodySize * 1.5);
+      const lineGap = Math.max(8, Math.round(bodySize * 0.52));
+      const rowH = Math.round(bodySize * 1.45);
+      const titleH = Math.round(titleSize * 1.12);
+      const totalRowsH = titleH + lineGap * 2 + lines.length * rowH;
       const maxLine = nonEmpty.reduce((m, line) => {
         ctx.font = `bold ${bodySize}px Segoe UI`;
         return Math.max(m, ctx.measureText(line).width);
       }, 0);
       ctx.font = `bold ${titleSize}px Segoe UI`;
       const titleW = ctx.measureText(title).width;
-      if (totalRowsH <= panelH - 24 && Math.max(maxLine, titleW) <= maxW) break;
+      if (totalRowsH <= panelH - 34 && Math.max(maxLine, titleW) <= maxW) break;
     }
 
-    const titleSize = Math.round(bodySize * 1.45);
-    const lineGap = Math.max(4, Math.round(bodySize * 0.45));
-    const rowH = Math.round(bodySize * 1.28);
+    const titleSize = Math.round(bodySize * 1.5);
+    const lineGap = Math.max(8, Math.round(bodySize * 0.52));
+    const rowH = Math.round(bodySize * 1.45);
 
-    let y = padY + titleSize;
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    const centerX = panelX + panelW * 0.5;
+    let y = padY + Math.round(titleSize * 0.6);
+
     ctx.fillStyle = '#ffffff';
     ctx.font = `bold ${titleSize}px Segoe UI`;
-    ctx.fillText(title, padX, y);
-    y += lineGap + Math.round(bodySize * 0.25);
+    ctx.fillText(title, centerX, y);
 
+    y += lineGap;
+    ctx.strokeStyle = '#34506e';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(panelX + 34, y + 1);
+    ctx.lineTo(panelX + panelW - 34, y + 1);
+    ctx.stroke();
+
+    y += lineGap;
     ctx.font = `bold ${bodySize}px Segoe UI`;
     for (const line of lines) {
       y += rowH;
       if (!line) continue;
-      ctx.fillText(line, padX, y);
+      ctx.fillText(line, centerX, y);
     }
+
+    ctx.restore();
   }
+
 
 
   function drawHUD() {
@@ -1928,22 +2061,20 @@
 
     drawBottomConsole();
 
-
     if (game.showHelp) {
-      drawLeftInfoPanel('HELP', [
-        'A / D  - ROTATE SHIP',
-        'W / S  - THROTTLE UP / DOWN',
-        'SPACE  - TOGGLE TRAY OPEN/CLOSED',
-        'O / I  - ARM SEGMENT 1 UP / DOWN',
-        'M / N  - ARM SEGMENT 2 UP / DOWN',
-        'K / L  - ARM BASE CCW / CW',
-        ', / .  - CLAW CLOSE / OPEN',
-        'Q      - TRACK MODE (LANDED)',
-        'E      - TOGGLE LANDING GEAR',
-        'SAFE LANDING: SKIDS ONLY, LOW SPEED',
-        'LAND ON REFUEL PAD TO REFILL FUEL',
-        'LAND ON RECYCLE PAD TO DELIVER CARGO',
-        'H  - CLOSE HELP AND RESUME',
+      drawLeftInfoPanel('MISSION CONTROLS', [
+        'A / D — Rotate the ship left or right while flying.',
+        'W / S — Increase or decrease engine throttle.',
+        'SPACE — Start mission, then open or close the cargo tray.',
+        'K / L — Rotate the arm base counterclockwise / clockwise.',
+        'I / O — Move arm segment 1 up / down.',
+        'N / M — Move arm segment 2 up / down.',
+        ', / . — Close or open the claw to grab cargo.',
+        'E — Extend or retract landing gear (2-second movement).',
+        'Q — Toggle track mode when landed and stable.',
+        'H — Show/hide this help panel. ESC — Pause/unpause.',
+        'Land gently on skids, refuel pads refill fuel,',
+        'and recycle pads score delivered cargo.',
       ]);
     }
 
