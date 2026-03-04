@@ -7,9 +7,61 @@ html, body {
   font-family: "Segoe UI", Tahoma, sans-serif;
 }
 
+body {
+  position: relative;
+}
+
 #gameCanvas {
   display: block;
   width: 100vw;
   height: 100vh;
   background: radial-gradient(circle at 20% 20%, #090c2c 0%, #000 65%);
+}
+
+#radioHud {
+  position: fixed;
+  display: none;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  background: #000;
+  border: 2px solid #0b5;
+  color: #7dff9c;
+  pointer-events: auto;
+  z-index: 2;
+}
+
+#radioHud label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+#radioInput {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 5px 7px;
+  border: 1px solid #0b5;
+  background: #06110a;
+  color: #7dff9c;
+  font: 600 13px "Consolas", monospace;
+  outline: none;
+}
+
+#radioSend {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 4px 12px;
+  border: 1px solid #7dff9c;
+  background: #07351a;
+  color: #d8ffe3;
+  font: 700 12px "Segoe UI", Tahoma, sans-serif;
+  cursor: pointer;
+}
+
+#radioSend:hover,
+#radioSend:focus-visible {
+  background: #0b5;
+  color: #fff;
 }
