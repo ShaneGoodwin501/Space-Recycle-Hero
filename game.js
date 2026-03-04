@@ -1977,7 +1977,7 @@
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // Front/rear windscreen windows (dark blue) with a thin white separator line.
+    // Side-profile front/rear windscreen windows (dark blue) with a thin white separator line.
     function drawWindscreen(points) {
       ctx.fillStyle = '#0d2b5c';
       ctx.beginPath();
@@ -1997,25 +1997,25 @@
       ctx.strokeStyle = 'rgba(180,220,255,0.55)';
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo((hi.x + (hj.x - hi.x) * 0.18) * m, (hi.y + 0.01) * m);
-      ctx.lineTo((hi.x + (hj.x - hi.x) * 0.82) * m, (hj.y + 0.01) * m);
+      ctx.moveTo((hi.x + (hj.x - hi.x) * 0.2) * m, (hi.y + 0.008) * m);
+      ctx.lineTo((hi.x + (hj.x - hi.x) * 0.8) * m, (hj.y + 0.008) * m);
       ctx.stroke();
     }
 
-    // Larger front windscreen near ship nose.
+    // Rear side window (left), similar to a car rear windscreen in side profile.
     drawWindscreen([
-      { x: -0.58, y: -0.46 },
-      { x: 0.58, y: -0.46 },
-      { x: 0.39, y: -0.19 },
-      { x: -0.39, y: -0.19 },
+      { x: -0.64, y: -0.42 },
+      { x: -0.18, y: -0.42 },
+      { x: -0.24, y: -0.16 },
+      { x: -0.58, y: -0.2 },
     ]);
 
-    // Larger rear windscreen near upper-mid hull.
+    // Front side window (right), similar to a car front windscreen in side profile.
     drawWindscreen([
-      { x: -0.47, y: -0.14 },
-      { x: 0.47, y: -0.14 },
-      { x: 0.34, y: 0.1 },
-      { x: -0.34, y: 0.1 },
+      { x: 0.16, y: -0.42 },
+      { x: 0.62, y: -0.42 },
+      { x: 0.55, y: -0.2 },
+      { x: 0.22, y: -0.16 },
     ]);
 
     if (drawGearVisual) {
