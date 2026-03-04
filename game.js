@@ -132,7 +132,7 @@
   if (radioInput) {
     radioInput.addEventListener('keydown', (e) => {
       e.stopPropagation();
-      if (e.code === 'Enter') {
+      if (e.code === 'Enter' || e.key === 'Enter') {
         e.preventDefault();
         sendRadioMessage();
       }
@@ -2263,13 +2263,13 @@
       ctx.fillText(`${Math.round(value * 100)}${unit}`, x + 8, panelY + Math.max(30, Math.floor(44 * uiScale)));
     }
 
-    const barW = clamp(innerW * 0.16, 92 * uiScale, 250 * uiScale);
+    const barW = 170;
     const fuelX = pad + barW + gap;
     drawBar(pad, barW, 'THROTTLE', ship.throttle);
     drawBar(fuelX, barW, 'FUEL', ship.fuel / 100);
 
-    const gaugeSize = clamp(Math.min(panelH - 8, 110 * uiScale), 44 * uiScale, 110 * uiScale);
-    const attitudePanelW = gaugeSize + Math.max(20, Math.floor(32 * uiScale));
+    const gaugeSize = clamp(Math.min(panelH - 8, 110), 44, 110);
+    const attitudePanelW = Math.max(132, Math.round(gaugeSize + 32));
     const attitudeX = fuelX + barW + gap;
     const gx = attitudeX + attitudePanelW / 2;
     const gy = panelY + panelH / 2 + 10;
@@ -2295,7 +2295,7 @@
     ctx.font = `bold ${Math.max(10, Math.floor(13 * uiScale))}px Segoe UI`;
     ctx.fillText('ATTITUDE', gx - 30, panelY + 16);
 
-    const speedW = clamp(innerW * 0.125, 95 * uiScale, 180 * uiScale);
+    const speedW = 140;
     const speedX = attitudeX + attitudePanelW + gap;
     const sgx = speedX + speedW * 0.5;
     const sgy = panelY + panelH * 0.68;
@@ -2364,7 +2364,7 @@
     ctx.font = `bold ${Math.max(10, Math.floor(14 * uiScale))}px "Consolas", monospace`;
     ctx.fillText(`${speedMps.toFixed(1)} m/s`, speedX + 10, panelY + panelH - 10);
 
-    const weightW = clamp(innerW * 0.125, 98 * uiScale, 182 * uiScale);
+    const weightW = 140;
     const weightX = speedX + speedW + gap;
     const wgx = weightX + weightW * 0.5;
     const wgy = panelY + panelH * 0.68;
@@ -2417,24 +2417,9 @@
     ctx.fillText(`CARGO ${cargoCount}/${CONFIG.trayCapacity}`, weightX + 10, panelY + panelH - 8);
 
     const dX = weightX + weightW + gap;
-    const totalW = Math.max(300 * uiScale, W - dX - pad);
-    let scoreW = clamp(totalW * 0.18, 88 * uiScale, 170 * uiScale);
-    let mapW = clamp(totalW * 0.27, 75 * uiScale, 300 * uiScale);
-    const minSidePanelW = 86 * uiScale;
-
-    let availableForSidePanels = totalW - scoreW - mapW - gap * 3;
-    if (availableForSidePanels < minSidePanelW * 2) {
-      const minMapW = 70 * uiScale;
-      mapW = Math.max(minMapW, totalW - scoreW - gap * 3 - minSidePanelW * 2);
-      availableForSidePanels = totalW - scoreW - mapW - gap * 3;
-    }
-    if (availableForSidePanels < minSidePanelW * 2) {
-      scoreW = Math.max(70 * uiScale, totalW - mapW - gap * 3 - minSidePanelW * 2);
-      availableForSidePanels = totalW - scoreW - mapW - gap * 3;
-    }
-
-    const distW = Math.max(minSidePanelW, availableForSidePanels * 0.5);
-    const radioW = Math.max(minSidePanelW, availableForSidePanels - distW);
+    const distW = 170;
+    const radioW = 170;
+    const mapW = 230;
 
     ctx.fillStyle = '#000';
     ctx.fillRect(dX, panelY, distW, panelH);
@@ -2454,6 +2439,7 @@
     drawMiniMapInPanel(mapX, panelY, mapW, panelH);
 
     const scoreX = mapX + mapW + gap;
+    const scoreW = Math.max(88, W - scoreX - pad);
     ctx.fillStyle = '#000';
     ctx.fillRect(scoreX, panelY, scoreW, panelH);
     ctx.strokeStyle = '#0b5';
@@ -2800,7 +2786,7 @@
   function drawShipRadioBubble() {
     if (game.radioMessage.timer <= 0 || !game.radioMessage.text || game.state === 'CRASHED') return;
 
-    const anchor = toScreen(ship.x, ship.y - 3.3);
+    const anchor = toScreen(ship.x, ship.y - 1.55);
     const maxWidth = Math.max(120, Math.min(260, W * 0.35));
     const fontSize = 15;
     ctx.font = `600 ${fontSize}px Segoe UI`;
@@ -2823,7 +2809,7 @@
     const lineH = 18;
     const bubbleH = Math.max(34, lines.length * lineH + 16);
     const bubbleX = clamp(anchor.x - bubbleW * 0.5, 8, W - bubbleW - 8);
-    const bubbleY = Math.max(8, anchor.y - bubbleH - 3);
+    const bubbleY = Math.max(8, anchor.y - bubbleH - 1);
 
     const radius = 10;
     ctx.fillStyle = '#ffffff';
@@ -2834,7 +2820,7 @@
     ctx.lineTo(bubbleX + bubbleW, bubbleY + bubbleH - radius);
     ctx.quadraticCurveTo(bubbleX + bubbleW, bubbleY + bubbleH, bubbleX + bubbleW - radius, bubbleY + bubbleH);
     ctx.lineTo(bubbleX + bubbleW * 0.54, bubbleY + bubbleH);
-    ctx.lineTo(anchor.x + 6, bubbleY + bubbleH + 2);
+    ctx.lineTo(anchor.x + 4, bubbleY + bubbleH + 10);
     ctx.lineTo(bubbleX + bubbleW * 0.46, bubbleY + bubbleH);
     ctx.lineTo(bubbleX + radius, bubbleY + bubbleH);
     ctx.quadraticCurveTo(bubbleX, bubbleY + bubbleH, bubbleX, bubbleY + bubbleH - radius);
