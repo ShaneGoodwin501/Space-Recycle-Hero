@@ -88,7 +88,7 @@
   resize();
 
   const keys = new Set();
-  const blocked = new Set(['KeyW','KeyA','KeyS','KeyD','KeyU','KeyJ','KeyI','KeyK','KeyO','KeyP','Semicolon','Space','Escape','KeyH','KeyQ','KeyE','KeyF']);
+  const blocked = new Set(['KeyW','KeyA','KeyS','KeyD','KeyU','KeyJ','KeyI','KeyK','KeyO','KeyP','KeyL','Semicolon','Space','Escape','KeyH','KeyQ','KeyE','KeyF']);
   function unlockAudioFromUserGesture() {
     initAudio();
     if (game.audio?.ctx && game.audio.ctx.state !== 'running') game.audio.ctx.resume();
@@ -840,10 +840,10 @@
 
     const playing = game.state === 'PLAYING' && !game.paused;
 
-    const armMoving = keys.has('KeyI') || keys.has('KeyO') ||
-      keys.has('KeyN') || keys.has('KeyM') ||
-      keys.has('KeyK') || keys.has('KeyL') ||
-      keys.has('Comma') || keys.has('Period');
+    const armMoving = keys.has('KeyI') || keys.has('KeyK') ||
+      keys.has('KeyU') || keys.has('KeyJ') ||
+      keys.has('KeyO') || keys.has('KeyP') ||
+      keys.has('KeyL') || keys.has('Semicolon');
 
     const targetRumble = playing ? Math.max(0, ship.throttle) * 0.1352 : 0;
     a.rumbleGain.gain.setTargetAtTime(targetRumble, t, 0.05);
@@ -1010,7 +1010,7 @@
       if (keys.has('KeyJ')) ship.seg1Angle += CONFIG.seg1Rate * dt;
       if (keys.has('KeyO')) ship.seg2Angle -= CONFIG.seg2Rate * dt;
       if (keys.has('KeyP')) ship.seg2Angle += CONFIG.seg2Rate * dt;
-      if (keys.has('KeyP')) ship.clawOpen = clamp(ship.clawOpen - CONFIG.clawRate * dt, 0, 1);
+      if (keys.has('KeyL')) ship.clawOpen = clamp(ship.clawOpen - CONFIG.clawRate * dt, 0, 1);
       if (keys.has('Semicolon')) ship.clawOpen = clamp(ship.clawOpen + CONFIG.clawRate * dt, 0, 1);
       ship.armDeployPose.baseAngle = ship.baseAngle;
       ship.armDeployPose.seg1Angle = ship.seg1Angle;
@@ -2466,7 +2466,7 @@
       { keys: ['I', 'K'], text: 'Rotate the arm base counterclockwise / clockwise.' },
       { keys: ['U', 'J'], text: 'Move arm segment 1 up / down.' },
       { keys: ['O', 'P'], text: 'Move arm segment 2 up / down.' },
-      { keys: ['P', ';'], text: 'Close or open the claw to grab cargo.' },
+      { keys: ['L', ';'], text: 'Close or open the claw to grab cargo.' },
       { keys: ['F'], text: 'Fold arm down for flight / unfold arm for cargo use.' },
       { keys: ['E'], text: 'Extend or retract landing gear (2-second movement).' },
       { keys: ['Q'], text: 'Toggle track mode when landed and stable.' },
