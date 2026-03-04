@@ -1977,6 +1977,35 @@
     ctx.lineWidth = 2;
     ctx.stroke();
 
+    // Cockpit windows (dark blue) to suggest crew presence inside the ship.
+    function drawWindow(cx, cy, rw, rh) {
+      const r = Math.min(rw, rh) * 0.28;
+      ctx.fillStyle = '#0f2f63';
+      ctx.beginPath();
+      ctx.moveTo((cx - rw + r) * m, (cy - rh) * m);
+      ctx.lineTo((cx + rw - r) * m, (cy - rh) * m);
+      ctx.quadraticCurveTo((cx + rw) * m, (cy - rh) * m, (cx + rw) * m, (cy - rh + r) * m);
+      ctx.lineTo((cx + rw) * m, (cy + rh - r) * m);
+      ctx.quadraticCurveTo((cx + rw) * m, (cy + rh) * m, (cx + rw - r) * m, (cy + rh) * m);
+      ctx.lineTo((cx - rw + r) * m, (cy + rh) * m);
+      ctx.quadraticCurveTo((cx - rw) * m, (cy + rh) * m, (cx - rw) * m, (cy + rh - r) * m);
+      ctx.lineTo((cx - rw) * m, (cy - rh + r) * m);
+      ctx.quadraticCurveTo((cx - rw) * m, (cy - rh) * m, (cx - rw + r) * m, (cy - rh) * m);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = '#6fa4ff';
+      ctx.lineWidth = 1.25;
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(255,255,255,0.38)';
+      ctx.beginPath();
+      ctx.arc((cx - rw * 0.28) * m, (cy - rh * 0.2) * m, Math.max(1.4, rw * m * 0.19), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    drawWindow(-0.46, -0.16, 0.22, 0.11);
+    drawWindow(0.46, -0.16, 0.22, 0.11);
+
     // Centered recycle logo on hull (stacked to fit ship width)
     ctx.fillStyle = '#1f8f3a';
     ctx.font = `bold ${Math.max(10, m * 0.2)}px monospace`;
