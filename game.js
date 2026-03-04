@@ -53,6 +53,9 @@
 
   const canvas = document.getElementById('gameCanvas');
   const ctx = canvas.getContext('2d');
+  const radioHud = document.getElementById('radioHud');
+  const radioInput = document.getElementById('radioInput');
+  const radioSend = document.getElementById('radioSend');
 
   let W = 1280;
   let H = 720;
@@ -84,8 +87,59 @@
     return getGameplayHeight() * 0.5;
   }
 
+  function trimRadioMessage(text) {
+    return text.trim().replace(/\s+/g, ' ').slice(0, 120);
+  }
+
+  function sendRadioMessage() {
+    const text = trimRadioMessage(radioInput.value || '');
+    if (!text) return;
+    game.radioMessage.text = text;
+    game.radioMessage.timer = 5;
+    radioInput.value = '';
+    radioInput.blur();
+  }
+
+  function setRadioHudLayout(x, y, w, h, uiScale) {
+    if (!radioHud) return;
+    radioHud.style.display = 'block';
+    radioHud.style.left = `${Math.round(x)}px`;
+    radioHud.style.top = `${Math.round(y)}px`;
+    radioHud.style.width = `${Math.round(w)}px`;
+    radioHud.style.height = `${Math.round(h)}px`;
+    radioHud.style.padding = `${Math.max(6, Math.round(8 * uiScale))}px ${Math.max(8, Math.round(10 * uiScale))}px`;
+
+    const labelSize = Math.max(9, Math.round(12 * uiScale));
+    const inputSize = Math.max(10, Math.round(13 * uiScale));
+    const buttonSize = Math.max(9, Math.round(12 * uiScale));
+    const buttonBottom = Math.max(6, Math.round(8 * uiScale));
+
+    radioHud.querySelector('label').style.fontSize = `${labelSize}px`;
+    radioInput.style.fontSize = `${inputSize}px`;
+    radioInput.style.padding = `${Math.max(4, Math.round(5 * uiScale))}px ${Math.max(5, Math.round(7 * uiScale))}px`;
+    radioInput.style.paddingRight = `${Math.max(68, Math.round(78 * uiScale))}px`;
+    radioInput.style.marginTop = `${Math.max(2, Math.round(3 * uiScale))}px`;
+
+    radioSend.style.fontSize = `${buttonSize}px`;
+    radioSend.style.right = `${Math.max(6, Math.round(8 * uiScale))}px`;
+    radioSend.style.bottom = `${buttonBottom}px`;
+    radioSend.style.padding = `${Math.max(3, Math.round(4 * uiScale))}px ${Math.max(8, Math.round(12 * uiScale))}px`;
+  }
+
   window.addEventListener('resize', resize);
   resize();
+
+  if (radioInput) {
+    radioInput.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.code === 'Enter' || e.key === 'Enter') {
+        e.preventDefault();
+        sendRadioMessage();
+      }
+    });
+    radioInput.addEventListener('keyup', (e) => e.stopPropagation());
+  }
+  if (radioSend) radioSend.addEventListener('click', sendRadioMessage);
 
   const keys = new Set();
   const blocked = new Set(['KeyW','KeyA','KeyS','KeyD','KeyU','KeyJ','KeyI','KeyK','KeyO','KeyP','KeyL','Semicolon','Space','Escape','KeyH','KeyQ','KeyE','KeyF']);
@@ -470,6 +524,7 @@
     audio: null,
     supplyShips: [],
     supplySpawnTimer: CONFIG.supplyShipIntervalSec,
+    radioMessage: { text: '', timer: 0 },
   };
 
 
@@ -2208,14 +2263,43 @@
       ctx.fillText(`${Math.round(value * 100)}${unit}`, x + 8, panelY + Math.max(30, Math.floor(44 * uiScale)));
     }
 
-    const barW = clamp(innerW * 0.16, 92 * uiScale, 250 * uiScale);
-    const fuelX = pad + barW + gap;
-    drawBar(pad, barW, 'THROTTLE', ship.throttle);
-    drawBar(fuelX, barW, 'FUEL', ship.fuel / 100);
+    const panelWeights = {
+      throttle: 1,
+      fuel: 1,
+      attitude: 1,
+      speed: 1,
+      weight: 1,
+      distance: 1,
+      radio: 2,
+      map: 2,
+      score: 1,
+    };
+    const panelCount = Object.keys(panelWeights).length;
+    const totalUnits = Object.values(panelWeights).reduce((sum, units) => sum + units, 0);
+    const availableW = Math.max(260, innerW - gap * (panelCount - 1));
+    const unitW = availableW / totalUnits;
+    const panelW = (units) => Math.max(52, unitW * units);
 
-    const gaugeSize = clamp(Math.min(panelH - 8, 110 * uiScale), 44 * uiScale, 110 * uiScale);
-    const attitudePanelW = gaugeSize + Math.max(20, Math.floor(32 * uiScale));
-    const attitudeX = fuelX + barW + gap;
+    const barW = panelW(panelWeights.throttle);
+    const fuelW = panelW(panelWeights.fuel);
+    const attitudePanelW = panelW(panelWeights.attitude);
+    const speedW = panelW(panelWeights.speed);
+    const weightW = panelW(panelWeights.weight);
+    const distW = panelW(panelWeights.distance);
+    const radioW = panelW(panelWeights.radio);
+    const mapW = panelW(panelWeights.map);
+
+    let cursorX = pad;
+
+    drawBar(cursorX, barW, 'THROTTLE', ship.throttle);
+    cursorX += barW + gap;
+
+    const fuelX = cursorX;
+    drawBar(fuelX, fuelW, 'FUEL', ship.fuel / 100);
+    cursorX += fuelW + gap;
+
+    const gaugeSize = clamp(Math.min(panelH - 8, attitudePanelW * 0.84), 36, 110);
+    const attitudeX = cursorX;
     const gx = attitudeX + attitudePanelW / 2;
     const gy = panelY + panelH / 2 + 10;
     ctx.fillStyle = '#000';
@@ -2238,10 +2322,10 @@
     ctx.restore();
     ctx.fillStyle = '#7dff9c';
     ctx.font = `bold ${Math.max(10, Math.floor(13 * uiScale))}px Segoe UI`;
-    ctx.fillText('ATTITUDE', gx - 30, panelY + 16);
+    ctx.fillText('ATTITUDE', attitudeX + 8, panelY + 16);
+    cursorX += attitudePanelW + gap;
 
-    const speedW = clamp(innerW * 0.125, 95 * uiScale, 180 * uiScale);
-    const speedX = attitudeX + attitudePanelW + gap;
+    const speedX = cursorX;
     const sgx = speedX + speedW * 0.5;
     const sgy = panelY + panelH * 0.68;
     const speedMps = Math.hypot(ship.vx, ship.vy);
@@ -2308,9 +2392,9 @@
     ctx.fillText('SPEED', speedX + 10, panelY + 16);
     ctx.font = `bold ${Math.max(10, Math.floor(14 * uiScale))}px "Consolas", monospace`;
     ctx.fillText(`${speedMps.toFixed(1)} m/s`, speedX + 10, panelY + panelH - 10);
+    cursorX += speedW + gap;
 
-    const weightW = clamp(innerW * 0.125, 98 * uiScale, 182 * uiScale);
-    const weightX = speedX + speedW + gap;
+    const weightX = cursorX;
     const wgx = weightX + weightW * 0.5;
     const wgy = panelY + panelH * 0.68;
     const maxCargoMass = CONFIG.trayCapacity * Math.max(...cargoTypes.map((t) => t.mass));
@@ -2360,18 +2444,9 @@
     ctx.font = `bold ${Math.max(10, Math.floor(14 * uiScale))}px "Consolas", monospace`;
     ctx.fillText(`${shipMass().toFixed(2)} t`, weightX + 10, panelY + panelH - 24);
     ctx.fillText(`CARGO ${cargoCount}/${CONFIG.trayCapacity}`, weightX + 10, panelY + panelH - 8);
+    cursorX += weightW + gap;
 
-    const dX = weightX + weightW + gap;
-    const totalW = Math.max(220 * uiScale, W - dX - pad);
-    const scoreW = Math.min(200 * uiScale, Math.max(98 * uiScale, totalW * 0.23));
-
-    // 50% wider mini-map target than the original design.
-    const targetMapW = clamp(Math.floor(W * 0.3), 150 * uiScale, 360 * uiScale);
-    const minDistW = 110 * uiScale;
-    const maxMapW = Math.max(95 * uiScale, totalW - scoreW - gap * 2 - minDistW);
-    const mapW = Math.max(95 * uiScale, Math.min(targetMapW, maxMapW));
-    const distW = Math.max(minDistW, totalW - scoreW - mapW - gap * 2);
-
+    const dX = cursorX;
     ctx.fillStyle = '#000';
     ctx.fillRect(dX, panelY, distW, panelH);
     ctx.strokeStyle = '#0b5';
@@ -2382,11 +2457,18 @@
     ctx.fillText('DISTANCE TO GROUND', dX + 12, panelY + 22);
     ctx.font = `bold ${Math.max(16, Math.floor(44 * uiScale))}px "Consolas", monospace`;
     ctx.fillText(`${dist.toFixed(1)} m`, dX + 12, panelY + panelH * 0.72);
+    cursorX += distW + gap;
 
-    const mapX = dX + distW + gap;
+    const radioX = cursorX;
+    setRadioHudLayout(radioX, panelY, radioW, panelH, uiScale);
+    cursorX += radioW + gap;
+
+    const mapX = cursorX;
     drawMiniMapInPanel(mapX, panelY, mapW, panelH);
+    cursorX += mapW + gap;
 
-    const scoreX = mapX + mapW + gap;
+    const scoreX = cursorX;
+    const scoreW = panelW(panelWeights.score);
     ctx.fillStyle = '#000';
     ctx.fillRect(scoreX, panelY, scoreW, panelH);
     ctx.strokeStyle = '#0b5';
@@ -2730,6 +2812,63 @@
 
 
 
+  function drawShipRadioBubble() {
+    if (game.radioMessage.timer <= 0 || !game.radioMessage.text || game.state === 'CRASHED') return;
+
+    const anchor = toScreen(ship.x, ship.y - 1.55);
+    const maxWidth = Math.max(120, Math.min(260, W * 0.35));
+    const fontSize = 15;
+    ctx.font = `600 ${fontSize}px Segoe UI`;
+
+    const words = game.radioMessage.text.split(' ');
+    const lines = [];
+    let line = '';
+    for (const word of words) {
+      const candidate = line ? `${line} ${word}` : word;
+      if (ctx.measureText(candidate).width > maxWidth - 24 && line) {
+        lines.push(line);
+        line = word;
+      } else {
+        line = candidate;
+      }
+    }
+    if (line) lines.push(line);
+
+    const bubbleW = Math.max(120, Math.min(maxWidth, Math.max(...lines.map((text) => ctx.measureText(text).width)) + 24));
+    const lineH = 18;
+    const bubbleH = Math.max(34, lines.length * lineH + 16);
+    const bubbleX = clamp(anchor.x - bubbleW * 0.5, 8, W - bubbleW - 8);
+    const bubbleY = Math.max(8, anchor.y - bubbleH - 1);
+
+    const radius = 10;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(bubbleX + radius, bubbleY);
+    ctx.lineTo(bubbleX + bubbleW - radius, bubbleY);
+    ctx.quadraticCurveTo(bubbleX + bubbleW, bubbleY, bubbleX + bubbleW, bubbleY + radius);
+    ctx.lineTo(bubbleX + bubbleW, bubbleY + bubbleH - radius);
+    ctx.quadraticCurveTo(bubbleX + bubbleW, bubbleY + bubbleH, bubbleX + bubbleW - radius, bubbleY + bubbleH);
+    ctx.lineTo(bubbleX + bubbleW * 0.54, bubbleY + bubbleH);
+    ctx.lineTo(anchor.x + 4, bubbleY + bubbleH + 10);
+    ctx.lineTo(bubbleX + bubbleW * 0.46, bubbleY + bubbleH);
+    ctx.lineTo(bubbleX + radius, bubbleY + bubbleH);
+    ctx.quadraticCurveTo(bubbleX, bubbleY + bubbleH, bubbleX, bubbleY + bubbleH - radius);
+    ctx.lineTo(bubbleX, bubbleY + radius);
+    ctx.quadraticCurveTo(bubbleX, bubbleY, bubbleX + radius, bubbleY);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = '#0f0f0f';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    lines.forEach((text, index) => {
+      const y = bubbleY + 8 + lineH * (index + 0.5);
+      ctx.fillText(text, bubbleX + bubbleW * 0.5, y + 4);
+    });
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+  }
+
 
   function drawHUD() {
     if (game.paused) {
@@ -2813,6 +2952,7 @@
         updateCamera(dt);
       }
       updateExplosions(dt);
+      if (game.radioMessage.timer > 0) game.radioMessage.timer = Math.max(0, game.radioMessage.timer - dt);
       updateAudio();
     }
 
@@ -2825,6 +2965,7 @@
       drawCargo(c);
     }
     if (game.state !== 'CRASHED') drawShip();
+    drawShipRadioBubble();
     drawExplosions();
     drawHUD();
 
