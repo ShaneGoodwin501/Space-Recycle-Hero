@@ -88,7 +88,7 @@
   resize();
 
   const keys = new Set();
-  const blocked = new Set(['KeyW','KeyA','KeyS','KeyD','KeyI','KeyO','KeyK','KeyL','KeyN','KeyM','Comma','Period','Space','Escape','KeyH','KeyQ','KeyE','KeyF']);
+  const blocked = new Set(['KeyW','KeyA','KeyS','KeyD','KeyU','KeyJ','KeyI','KeyK','KeyO','KeyP','Semicolon','Space','Escape','KeyH','KeyQ','KeyE','KeyF']);
   function unlockAudioFromUserGesture() {
     initAudio();
     if (game.audio?.ctx && game.audio.ctx.state !== 'running') game.audio.ctx.resume();
@@ -1004,14 +1004,14 @@
 
     const armControlLocked = ship.armFolded || ship.armFoldBlend > 0.02;
     if (!armControlLocked) {
-      if (keys.has('KeyK')) ship.baseAngle -= CONFIG.baseRate * dt;
-      if (keys.has('KeyL')) ship.baseAngle += CONFIG.baseRate * dt;
-      if (keys.has('KeyI')) ship.seg1Angle -= CONFIG.seg1Rate * dt;
-      if (keys.has('KeyO')) ship.seg1Angle += CONFIG.seg1Rate * dt;
-      if (keys.has('KeyN')) ship.seg2Angle -= CONFIG.seg2Rate * dt;
-      if (keys.has('KeyM')) ship.seg2Angle += CONFIG.seg2Rate * dt;
-      if (keys.has('Comma')) ship.clawOpen = clamp(ship.clawOpen - CONFIG.clawRate * dt, 0, 1);
-      if (keys.has('Period')) ship.clawOpen = clamp(ship.clawOpen + CONFIG.clawRate * dt, 0, 1);
+      if (keys.has('KeyI')) ship.baseAngle -= CONFIG.baseRate * dt;
+      if (keys.has('KeyK')) ship.baseAngle += CONFIG.baseRate * dt;
+      if (keys.has('KeyU')) ship.seg1Angle -= CONFIG.seg1Rate * dt;
+      if (keys.has('KeyJ')) ship.seg1Angle += CONFIG.seg1Rate * dt;
+      if (keys.has('KeyO')) ship.seg2Angle -= CONFIG.seg2Rate * dt;
+      if (keys.has('KeyP')) ship.seg2Angle += CONFIG.seg2Rate * dt;
+      if (keys.has('KeyP')) ship.clawOpen = clamp(ship.clawOpen - CONFIG.clawRate * dt, 0, 1);
+      if (keys.has('Semicolon')) ship.clawOpen = clamp(ship.clawOpen + CONFIG.clawRate * dt, 0, 1);
       ship.armDeployPose.baseAngle = ship.baseAngle;
       ship.armDeployPose.seg1Angle = ship.seg1Angle;
       ship.armDeployPose.seg2Angle = ship.seg2Angle;
@@ -2463,10 +2463,10 @@
       { keys: ['A', 'D'], text: 'Rotate the ship left or right while flying.' },
       { keys: ['W', 'S'], text: 'Increase or decrease engine throttle.' },
       { keys: ['SPACE'], text: 'Start mission, then open or close the cargo tray.' },
-      { keys: ['K', 'L'], text: 'Rotate the arm base counterclockwise / clockwise.' },
-      { keys: ['I', 'O'], text: 'Move arm segment 1 up / down.' },
-      { keys: ['N', 'M'], text: 'Move arm segment 2 up / down.' },
-      { keys: [',', '.'], text: 'Close or open the claw to grab cargo.' },
+      { keys: ['I', 'K'], text: 'Rotate the arm base counterclockwise / clockwise.' },
+      { keys: ['U', 'J'], text: 'Move arm segment 1 up / down.' },
+      { keys: ['O', 'P'], text: 'Move arm segment 2 up / down.' },
+      { keys: ['P', ';'], text: 'Close or open the claw to grab cargo.' },
       { keys: ['F'], text: 'Fold arm down for flight / unfold arm for cargo use.' },
       { keys: ['E'], text: 'Extend or retract landing gear (2-second movement).' },
       { keys: ['Q'], text: 'Toggle track mode when landed and stable.' },
