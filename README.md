@@ -1,8 +1,29 @@
 # Space Recycle Hero
 
-A full-screen 2D lunar cargo/recycling game for desktop browser (keyboard controls).
+A full-screen 2D lunar cargo/recycling game for desktop browser (keyboard controls), now with lightweight multiplayer support.
+
+## Multiplayer server (up to 20 players)
+
+1. Run:
+   ```bash
+   npm start
+   ```
+2. Open in browser:
+   - `http://<server-ip>:8080/`
+3. Share that URL with other players on your network.
+
+### Multiplayer behavior
+- Supports up to **20 concurrent players**.
+- New players are assigned a spawn location that avoids overlap with existing ships.
+- If ships touch each other, both are marked as crashed/exploded.
+- Your own ship is rendered **white**; other players are rendered **gray**.
+- Other players are visible in the world and on the mini-map.
+- Radio chat bubbles are visible for all players.
+- Session identity is keyed by a persistent browser token (`localStorage`) used as a MAC-like identifier.
 
 ## Deploy on Apache2 (Ubuntu)
+
+You can still host the static files with Apache, but multiplayer endpoints require running `server.js`.
 
 1. Copy this project folder to your web root, e.g.:
    ```bash
@@ -15,11 +36,9 @@ A full-screen 2D lunar cargo/recycling game for desktop browser (keyboard contro
 3. Open in browser:
    - `http://<server-ip>/lunar-cargo/`
 
-No build step is required. The game is pure static HTML/CSS/JS.
-
 ## Optional PHP usage
 
-This project does **not require PHP** to run. Apache + static hosting is enough.
+This project does **not require PHP** to run.
 
 ## Controls
 
@@ -50,18 +69,3 @@ This project does **not require PHP** to run. Apache + static hosting is enough.
 5. Carry to recycle pads marked **RECYCLE HERE**.
 6. Land safely on skids and deliver cargo for points.
 7. Refuel at refuel stations by landing safely on their pad.
-
-## Critical rules implemented
-
-- Hull touching terrain/obstacles/cargo = crash + explosion.
-- Safe landing only on skids with low speed and near-upright angle.
-- Moon gravity (~1.62 m/s²), persistent throttle, fuel burn tied to throttle.
-
-## Tuning constants
-
-Top of `game.js` exposes key constants:
-- gravity, thrust max, torque
-- fuel burn rates
-- landing thresholds
-- crane angular/claw speeds
-- camera dead-zone and smoothing

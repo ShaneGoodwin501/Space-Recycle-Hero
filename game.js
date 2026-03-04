@@ -51,6 +51,12 @@
     trayCapacity: 5,
   };
 
+  const MULTIPLAYER = {
+    maxPlayers: 20,
+    statePushHz: 15,
+    reconnectMs: 2000,
+  };
+
   const canvas = document.getElementById('gameCanvas');
   const ctx = canvas.getContext('2d');
   const radioHud = document.getElementById('radioHud');
@@ -91,11 +97,23 @@
     return text.trim().replace(/\s+/g, ' ').slice(0, 120);
   }
 
+  function getSessionMacAddressToken() {
+    const key = 'srh-device-mac-token';
+    const stored = localStorage.getItem(key);
+    if (stored) return stored;
+    const randomHex = Array.from(crypto.getRandomValues(new Uint8Array(6)))
+      .map((v) => v.toString(16).padStart(2, '0'))
+      .join(':');
+    localStorage.setItem(key, randomHex);
+    return randomHex;
+  }
+
   function sendRadioMessage() {
     const text = trimRadioMessage(radioInput.value || '');
     if (!text) return;
     game.radioMessage.text = text;
     game.radioMessage.timer = 5;
+    sendSocketMessage('radio', { text });
     radioInput.value = '';
     radioInput.blur();
   }
@@ -527,6 +545,60 @@
     radioMessage: { text: '', timer: 0 },
   };
 
+  const multiplayer = {
+    sessionMac: getSessionMacAddressToken(),
+    connected: false,
+    playerId: null,
+    others: new Map(),
+    pushTimer: 0,
+  };
+
+  async function sendSocketMessage(type, payload = {}) {
+    if (!multiplayer.playerId && type !== 'join') return null;
+    const endpointByType = {
+      join: '/api/join',
+      radio: '/api/radio',
+      'request-spawn': '/api/spawn',
+      'state-update': '/api/state',
+    };
+    const endpoint = endpointByType[type];
+    if (!endpoint) return null;
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playerId: multiplayer.playerId, ...payload }),
+    });
+    if (!response.ok) return null;
+    return response.json();
+  }
+
+  function setShipSpawn(x) {
+    shipSpawn.x = clamp(x, shipShape.hullRadius + 0.2, CONFIG.worldWidth - shipShape.hullRadius - 0.2);
+    shipSpawn.y = terrainY(shipSpawn.x) - shipShape.skidL.y;
+    ship.x = shipSpawn.x;
+    ship.y = shipSpawn.y;
+    setShipOnGround();
+  }
+
+  async function connectMultiplayer() {
+    try {
+      const joined = await sendSocketMessage('join', {
+        macAddress: multiplayer.sessionMac,
+        maxPlayers: MULTIPLAYER.maxPlayers,
+      });
+      if (!joined || !joined.playerId) throw new Error('join-failed');
+      multiplayer.connected = true;
+      multiplayer.playerId = joined.playerId;
+      setShipSpawn(joined.spawnX);
+    } catch {
+      multiplayer.connected = false;
+      multiplayer.playerId = null;
+      multiplayer.others.clear();
+      setTimeout(connectMultiplayer, MULTIPLAYER.reconnectMs);
+    }
+  }
+
 
 
 
@@ -937,6 +1009,8 @@
   game.camera.x = ship.x;
   game.camera.y = ship.y - 6;
 
+  connectMultiplayer();
+
   function getArmKinematics() {
     const baseLocal = { x: shipShape.craneBase.x, y: shipShape.craneBase.y + ship.armStowDrop * ARM_STOW_DROP_MAX };
     const base = worldFromLocal(ship, baseLocal);
@@ -956,6 +1030,7 @@
   function crashShip(reason) {
     if (game.state === 'CRASHED') return;
     game.state = 'CRASHED';
+    sendSocketMessage('state-update', { x: ship.x, y: ship.y, angle: ship.angle, crashed: true, radioMessage: '' });
     ship.crashTimer = CONFIG.respawnSeconds;
     ship.landed = false;
     ship.grabbedCargo = null;
@@ -1034,6 +1109,9 @@
     game.camera.x = ship.x;
     game.camera.y = ship.y - 6;
     game.state = 'READY';
+    sendSocketMessage('request-spawn').then((spawn) => {
+      if (spawn && typeof spawn.spawnX === 'number') setShipSpawn(spawn.spawnX);
+    });
     game.showHelp = false;
   }
 
@@ -1642,6 +1720,29 @@
     game.crunchFx = game.crunchFx.filter(p => p.life > 0);
   }
 
+
+  function updateMultiplayer(dt) {
+    if (!multiplayer.connected) return;
+    multiplayer.pushTimer += dt;
+    if (multiplayer.pushTimer < 1 / MULTIPLAYER.statePushHz) return;
+    multiplayer.pushTimer = 0;
+    sendSocketMessage('state-update', {
+      x: ship.x,
+      y: ship.y,
+      angle: ship.angle,
+      crashed: game.state === 'CRASHED',
+      radioMessage: game.radioMessage.timer > 0 ? game.radioMessage.text : '',
+    }).then((snapshot) => {
+      if (!snapshot) return;
+      multiplayer.others = new Map((snapshot.players || [])
+        .filter((player) => player.playerId !== multiplayer.playerId)
+        .map((player) => [player.playerId, player]));
+      if (snapshot.collision && snapshot.collision.includes(multiplayer.playerId) && game.state !== 'CRASHED') {
+        crashShip('ship-collision');
+      }
+    });
+  }
+
   function toScreen(wx, wy) {
     const px = (wx - game.camera.x) * CONFIG.METER_TO_PX + W / 2;
     const py = (wy - game.camera.y) * CONFIG.METER_TO_PX + getViewCenterY();
@@ -1942,12 +2043,12 @@
     const trayVisualW = shipShape.trayRect.w; // Keep drawer width fixed regardless of throttle/state.
     const trayEdgeW = Math.max(4, Math.min(7, 0.12 * m));
 
-    ctx.fillStyle = '#d5dbe6';
+    ctx.fillStyle = '#ffffff';
     ctx.fillRect(tr.x * m, trayVisualY * m, trayVisualW * m, trayVisualH * m);
     ctx.strokeStyle = '#18202c';
     ctx.lineWidth = 1.5;
     ctx.strokeRect(tr.x * m, trayVisualY * m, trayVisualW * m, trayVisualH * m);
-    ctx.fillStyle = '#d5dbe6';
+    ctx.fillStyle = '#ffffff';
     ctx.fillRect(tr.x * m, trayVisualY * m, trayEdgeW, trayVisualH * m);
     ctx.fillRect((tr.x + trayVisualW) * m - trayEdgeW, trayVisualY * m, trayEdgeW, trayVisualH * m);
 
@@ -2020,7 +2121,7 @@
     }
 
     // Hull
-    ctx.fillStyle = '#d5dbe6';
+    ctx.fillStyle = '#ffffff';
     ctx.beginPath();
     shipShape.hullPoints.forEach((p, i) => {
       if (i === 0) ctx.moveTo(p.x * m, p.y * m);
@@ -2228,6 +2329,51 @@
   }
 
 
+
+
+  function drawOtherShips() {
+    for (const player of multiplayer.others.values()) {
+      const center = toScreen(player.x, player.y);
+      ctx.save();
+      ctx.translate(center.x, center.y);
+      ctx.rotate(player.angle || 0);
+      const m = CONFIG.METER_TO_PX;
+      ctx.fillStyle = '#9aa0aa';
+      ctx.beginPath();
+      ctx.moveTo(0, -0.95 * m);
+      ctx.lineTo(0.9 * m, 0.5 * m);
+      ctx.lineTo(-0.9 * m, 0.5 * m);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#3b4048';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  function drawOtherShipRadioBubbles() {
+    for (const player of multiplayer.others.values()) {
+      if (!player.radioMessage) continue;
+      const anchor = toScreen(player.x, player.y - 1.55);
+      const bubbleW = 150;
+      const bubbleH = 34;
+      const bubbleX = clamp(anchor.x - bubbleW * 0.5, 8, W - bubbleW - 8);
+      const bubbleY = Math.max(8, anchor.y - bubbleH - 1);
+
+      ctx.fillStyle = '#e6e6e6';
+      ctx.fillRect(bubbleX, bubbleY, bubbleW, bubbleH);
+      ctx.strokeStyle = '#3f3f3f';
+      ctx.strokeRect(bubbleX, bubbleY, bubbleW, bubbleH);
+      ctx.fillStyle = '#111';
+      ctx.font = '600 14px Segoe UI';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(player.radioMessage.slice(0, 30), bubbleX + bubbleW * 0.5, bubbleY + bubbleH * 0.5);
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+    }
+  }
 
   function drawBottomConsole() {
     const h = getConsoleHeight();
@@ -2532,13 +2678,22 @@
 
     const shipX = mapWorldX(clamp(ship.x, 0, CONFIG.worldWidth));
     const shipY = mapWorldY(clamp(ship.y, mapTopWorldY, mapBottomWorldY));
-    ctx.fillStyle = '#ff6b6b';
+    ctx.fillStyle = '#ffffff';
     ctx.beginPath();
     ctx.arc(shipX, shipY, 3.8, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 1;
     ctx.stroke();
+
+    for (const player of multiplayer.others.values()) {
+      const otherX = mapWorldX(clamp(player.x, 0, CONFIG.worldWidth));
+      const otherY = mapWorldY(clamp(player.y, mapTopWorldY, mapBottomWorldY));
+      ctx.fillStyle = '#9aa0aa';
+      ctx.beginPath();
+      ctx.arc(otherX, otherY, 3.1, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     ctx.fillStyle = '#7dff9c';
     ctx.font = 'bold 12px Segoe UI';
@@ -2953,6 +3108,7 @@
       }
       updateExplosions(dt);
       if (game.radioMessage.timer > 0) game.radioMessage.timer = Math.max(0, game.radioMessage.timer - dt);
+      updateMultiplayer(dt);
       updateAudio();
     }
 
@@ -2964,7 +3120,9 @@
       if (c.stored && ship.traySlide < 0.55) continue;
       drawCargo(c);
     }
+    drawOtherShips();
     if (game.state !== 'CRASHED') drawShip();
+    drawOtherShipRadioBubbles();
     drawShipRadioBubble();
     drawExplosions();
     drawHUD();
