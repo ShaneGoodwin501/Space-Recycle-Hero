@@ -88,7 +88,7 @@
   resize();
 
   const keys = new Set();
-  const blocked = new Set(['KeyW','KeyA','KeyS','KeyD','KeyI','KeyO','KeyK','KeyL','KeyN','KeyM','Comma','Period','Space','Escape','KeyH','KeyQ','KeyE','KeyF']);
+  const blocked = new Set(['KeyW','KeyA','KeyS','KeyD','KeyU','KeyJ','KeyI','KeyK','KeyO','KeyP','KeyL','Semicolon','Space','Escape','KeyH','KeyQ','KeyE','KeyF']);
   function unlockAudioFromUserGesture() {
     initAudio();
     if (game.audio?.ctx && game.audio.ctx.state !== 'running') game.audio.ctx.resume();
@@ -840,10 +840,10 @@
 
     const playing = game.state === 'PLAYING' && !game.paused;
 
-    const armMoving = keys.has('KeyI') || keys.has('KeyO') ||
-      keys.has('KeyN') || keys.has('KeyM') ||
-      keys.has('KeyK') || keys.has('KeyL') ||
-      keys.has('Comma') || keys.has('Period');
+    const armMoving = keys.has('KeyI') || keys.has('KeyK') ||
+      keys.has('KeyU') || keys.has('KeyJ') ||
+      keys.has('KeyO') || keys.has('KeyP') ||
+      keys.has('KeyL') || keys.has('Semicolon');
 
     const targetRumble = playing ? Math.max(0, ship.throttle) * 0.1352 : 0;
     a.rumbleGain.gain.setTargetAtTime(targetRumble, t, 0.05);
@@ -1004,14 +1004,14 @@
 
     const armControlLocked = ship.armFolded || ship.armFoldBlend > 0.02;
     if (!armControlLocked) {
-      if (keys.has('KeyK')) ship.baseAngle -= CONFIG.baseRate * dt;
-      if (keys.has('KeyL')) ship.baseAngle += CONFIG.baseRate * dt;
-      if (keys.has('KeyI')) ship.seg1Angle -= CONFIG.seg1Rate * dt;
-      if (keys.has('KeyO')) ship.seg1Angle += CONFIG.seg1Rate * dt;
-      if (keys.has('KeyN')) ship.seg2Angle -= CONFIG.seg2Rate * dt;
-      if (keys.has('KeyM')) ship.seg2Angle += CONFIG.seg2Rate * dt;
-      if (keys.has('Comma')) ship.clawOpen = clamp(ship.clawOpen - CONFIG.clawRate * dt, 0, 1);
-      if (keys.has('Period')) ship.clawOpen = clamp(ship.clawOpen + CONFIG.clawRate * dt, 0, 1);
+      if (keys.has('KeyI')) ship.baseAngle -= CONFIG.baseRate * dt;
+      if (keys.has('KeyK')) ship.baseAngle += CONFIG.baseRate * dt;
+      if (keys.has('KeyU')) ship.seg1Angle -= CONFIG.seg1Rate * dt;
+      if (keys.has('KeyJ')) ship.seg1Angle += CONFIG.seg1Rate * dt;
+      if (keys.has('KeyO')) ship.seg2Angle -= CONFIG.seg2Rate * dt;
+      if (keys.has('KeyL')) ship.seg2Angle += CONFIG.seg2Rate * dt;
+      if (keys.has('KeyP')) ship.clawOpen = clamp(ship.clawOpen - CONFIG.clawRate * dt, 0, 1);
+      if (keys.has('Semicolon')) ship.clawOpen = clamp(ship.clawOpen + CONFIG.clawRate * dt, 0, 1);
       ship.armDeployPose.baseAngle = ship.baseAngle;
       ship.armDeployPose.seg1Angle = ship.seg1Angle;
       ship.armDeployPose.seg2Angle = ship.seg2Angle;
@@ -1977,13 +1977,46 @@
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // Centered recycle logo on hull (stacked to fit ship width)
-    ctx.fillStyle = '#1f8f3a';
-    ctx.font = `bold ${Math.max(10, m * 0.2)}px monospace`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('Recycle', 0, -0.16 * m);
-    ctx.fillText('Hero', 0, 0.02 * m);
+    // Side-profile front/rear windscreen windows (dark blue) with a thin white separator line.
+    function drawWindscreen(points) {
+      ctx.fillStyle = '#0d2b5c';
+      ctx.beginPath();
+      ctx.moveTo(points[0].x * m, points[0].y * m);
+      for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x * m, points[i].y * m);
+      ctx.closePath();
+      ctx.fill();
+
+      // Thin white line separating glass from hull edge.
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.15;
+      ctx.stroke();
+
+      // Subtle reflection highlight.
+      const hi = points[0];
+      const hj = points[1];
+      ctx.strokeStyle = 'rgba(180,220,255,0.55)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo((hi.x + (hj.x - hi.x) * 0.2) * m, (hi.y + 0.008) * m);
+      ctx.lineTo((hi.x + (hj.x - hi.x) * 0.8) * m, (hj.y + 0.008) * m);
+      ctx.stroke();
+    }
+
+    // Rear side window (left), similar to a car rear windscreen in side profile.
+    drawWindscreen([
+      { x: -0.64, y: -0.42 },
+      { x: -0.18, y: -0.42 },
+      { x: -0.24, y: -0.16 },
+      { x: -0.58, y: -0.2 },
+    ]);
+
+    // Front side window (right), similar to a car front windscreen in side profile.
+    drawWindscreen([
+      { x: 0.16, y: -0.42 },
+      { x: 0.62, y: -0.42 },
+      { x: 0.55, y: -0.2 },
+      { x: 0.22, y: -0.16 },
+    ]);
 
     if (drawGearVisual) {
       // Feet (bright red), centered at each leg endpoint.
@@ -2053,6 +2086,9 @@
 
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = armThickness;
+      // Rounded joins/caps prevent miter spikes from poking past the red joint circles.
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
       ctx.beginPath();
       ctx.moveTo(base.x * m, base.y * m);
       ctx.lineTo(p1.x * m, p1.y * m);
@@ -2463,10 +2499,10 @@
       { keys: ['A', 'D'], text: 'Rotate the ship left or right while flying.' },
       { keys: ['W', 'S'], text: 'Increase or decrease engine throttle.' },
       { keys: ['SPACE'], text: 'Start mission, then open or close the cargo tray.' },
-      { keys: ['K', 'L'], text: 'Rotate the arm base counterclockwise / clockwise.' },
-      { keys: ['I', 'O'], text: 'Move arm segment 1 up / down.' },
-      { keys: ['N', 'M'], text: 'Move arm segment 2 up / down.' },
-      { keys: [',', '.'], text: 'Close or open the claw to grab cargo.' },
+      { keys: ['I', 'K'], text: 'Rotate the arm base counterclockwise / clockwise.' },
+      { keys: ['U', 'J'], text: 'Move arm segment 1 up / down.' },
+      { keys: ['O', 'L'], text: 'Move arm segment 2 up / down.' },
+      { keys: ['P', ';'], text: 'Close or open the claw to grab cargo.' },
       { keys: ['F'], text: 'Fold arm down for flight / unfold arm for cargo use.' },
       { keys: ['E'], text: 'Extend or retract landing gear (2-second movement).' },
       { keys: ['Q'], text: 'Toggle track mode when landed and stable.' },
