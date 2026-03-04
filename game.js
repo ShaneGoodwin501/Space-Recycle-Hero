@@ -2263,14 +2263,43 @@
       ctx.fillText(`${Math.round(value * 100)}${unit}`, x + 8, panelY + Math.max(30, Math.floor(44 * uiScale)));
     }
 
-    const barW = 170;
-    const fuelX = pad + barW + gap;
-    drawBar(pad, barW, 'THROTTLE', ship.throttle);
-    drawBar(fuelX, barW, 'FUEL', ship.fuel / 100);
+    const panelWeights = {
+      throttle: 1,
+      fuel: 1,
+      attitude: 1,
+      speed: 1,
+      weight: 1,
+      distance: 1,
+      radio: 2,
+      map: 2,
+      score: 1,
+    };
+    const panelCount = Object.keys(panelWeights).length;
+    const totalUnits = Object.values(panelWeights).reduce((sum, units) => sum + units, 0);
+    const availableW = Math.max(260, innerW - gap * (panelCount - 1));
+    const unitW = availableW / totalUnits;
+    const panelW = (units) => Math.max(52, unitW * units);
 
-    const gaugeSize = clamp(Math.min(panelH - 8, 110), 44, 110);
-    const attitudePanelW = Math.max(132, Math.round(gaugeSize + 32));
-    const attitudeX = fuelX + barW + gap;
+    const barW = panelW(panelWeights.throttle);
+    const fuelW = panelW(panelWeights.fuel);
+    const attitudePanelW = panelW(panelWeights.attitude);
+    const speedW = panelW(panelWeights.speed);
+    const weightW = panelW(panelWeights.weight);
+    const distW = panelW(panelWeights.distance);
+    const radioW = panelW(panelWeights.radio);
+    const mapW = panelW(panelWeights.map);
+
+    let cursorX = pad;
+
+    drawBar(cursorX, barW, 'THROTTLE', ship.throttle);
+    cursorX += barW + gap;
+
+    const fuelX = cursorX;
+    drawBar(fuelX, fuelW, 'FUEL', ship.fuel / 100);
+    cursorX += fuelW + gap;
+
+    const gaugeSize = clamp(Math.min(panelH - 8, attitudePanelW * 0.84), 36, 110);
+    const attitudeX = cursorX;
     const gx = attitudeX + attitudePanelW / 2;
     const gy = panelY + panelH / 2 + 10;
     ctx.fillStyle = '#000';
@@ -2293,10 +2322,10 @@
     ctx.restore();
     ctx.fillStyle = '#7dff9c';
     ctx.font = `bold ${Math.max(10, Math.floor(13 * uiScale))}px Segoe UI`;
-    ctx.fillText('ATTITUDE', gx - 30, panelY + 16);
+    ctx.fillText('ATTITUDE', attitudeX + 8, panelY + 16);
+    cursorX += attitudePanelW + gap;
 
-    const speedW = 140;
-    const speedX = attitudeX + attitudePanelW + gap;
+    const speedX = cursorX;
     const sgx = speedX + speedW * 0.5;
     const sgy = panelY + panelH * 0.68;
     const speedMps = Math.hypot(ship.vx, ship.vy);
@@ -2363,9 +2392,9 @@
     ctx.fillText('SPEED', speedX + 10, panelY + 16);
     ctx.font = `bold ${Math.max(10, Math.floor(14 * uiScale))}px "Consolas", monospace`;
     ctx.fillText(`${speedMps.toFixed(1)} m/s`, speedX + 10, panelY + panelH - 10);
+    cursorX += speedW + gap;
 
-    const weightW = 140;
-    const weightX = speedX + speedW + gap;
+    const weightX = cursorX;
     const wgx = weightX + weightW * 0.5;
     const wgy = panelY + panelH * 0.68;
     const maxCargoMass = CONFIG.trayCapacity * Math.max(...cargoTypes.map((t) => t.mass));
@@ -2415,12 +2444,9 @@
     ctx.font = `bold ${Math.max(10, Math.floor(14 * uiScale))}px "Consolas", monospace`;
     ctx.fillText(`${shipMass().toFixed(2)} t`, weightX + 10, panelY + panelH - 24);
     ctx.fillText(`CARGO ${cargoCount}/${CONFIG.trayCapacity}`, weightX + 10, panelY + panelH - 8);
+    cursorX += weightW + gap;
 
-    const dX = weightX + weightW + gap;
-    const distW = 170;
-    const radioW = 170;
-    const mapW = 230;
-
+    const dX = cursorX;
     ctx.fillStyle = '#000';
     ctx.fillRect(dX, panelY, distW, panelH);
     ctx.strokeStyle = '#0b5';
@@ -2431,15 +2457,18 @@
     ctx.fillText('DISTANCE TO GROUND', dX + 12, panelY + 22);
     ctx.font = `bold ${Math.max(16, Math.floor(44 * uiScale))}px "Consolas", monospace`;
     ctx.fillText(`${dist.toFixed(1)} m`, dX + 12, panelY + panelH * 0.72);
+    cursorX += distW + gap;
 
-    const radioX = dX + distW + gap;
+    const radioX = cursorX;
     setRadioHudLayout(radioX, panelY, radioW, panelH, uiScale);
+    cursorX += radioW + gap;
 
-    const mapX = radioX + radioW + gap;
+    const mapX = cursorX;
     drawMiniMapInPanel(mapX, panelY, mapW, panelH);
+    cursorX += mapW + gap;
 
-    const scoreX = mapX + mapW + gap;
-    const scoreW = Math.max(88, W - scoreX - pad);
+    const scoreX = cursorX;
+    const scoreW = panelW(panelWeights.score);
     ctx.fillStyle = '#000';
     ctx.fillRect(scoreX, panelY, scoreW, panelH);
     ctx.strokeStyle = '#0b5';
