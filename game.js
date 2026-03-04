@@ -2053,6 +2053,9 @@
 
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = armThickness;
+      // Rounded joins/caps prevent miter spikes from poking past the red joint circles.
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
       ctx.beginPath();
       ctx.moveTo(base.x * m, base.y * m);
       ctx.lineTo(p1.x * m, p1.y * m);
