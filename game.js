@@ -95,7 +95,7 @@
     const text = trimRadioMessage(radioInput.value || '');
     if (!text) return;
     game.radioMessage.text = text;
-    game.radioMessage.timer = 2;
+    game.radioMessage.timer = 5;
     radioInput.value = '';
     radioInput.blur();
   }
@@ -2823,7 +2823,7 @@
     const lineH = 18;
     const bubbleH = Math.max(34, lines.length * lineH + 16);
     const bubbleX = clamp(anchor.x - bubbleW * 0.5, 8, W - bubbleW - 8);
-    const bubbleY = Math.max(8, anchor.y - bubbleH - 28);
+    const bubbleY = Math.max(8, anchor.y - bubbleH - 3);
 
     const radius = 10;
     ctx.fillStyle = '#ffffff';
@@ -2834,7 +2834,7 @@
     ctx.lineTo(bubbleX + bubbleW, bubbleY + bubbleH - radius);
     ctx.quadraticCurveTo(bubbleX + bubbleW, bubbleY + bubbleH, bubbleX + bubbleW - radius, bubbleY + bubbleH);
     ctx.lineTo(bubbleX + bubbleW * 0.54, bubbleY + bubbleH);
-    ctx.lineTo(anchor.x + 6, bubbleY + bubbleH + 14);
+    ctx.lineTo(anchor.x + 6, bubbleY + bubbleH + 2);
     ctx.lineTo(bubbleX + bubbleW * 0.46, bubbleY + bubbleH);
     ctx.lineTo(bubbleX + radius, bubbleY + bubbleH);
     ctx.quadraticCurveTo(bubbleX, bubbleY + bubbleH, bubbleX, bubbleY + bubbleH - radius);
