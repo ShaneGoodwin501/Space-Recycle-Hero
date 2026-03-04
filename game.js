@@ -1977,42 +1977,46 @@
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // Cockpit windows (dark blue) to suggest crew presence inside the ship.
-    function drawWindow(cx, cy, rw, rh) {
-      const r = Math.min(rw, rh) * 0.28;
-      ctx.fillStyle = '#0f2f63';
+    // Front/rear windscreen windows (dark blue) with a thin white separator line.
+    function drawWindscreen(points) {
+      ctx.fillStyle = '#0d2b5c';
       ctx.beginPath();
-      ctx.moveTo((cx - rw + r) * m, (cy - rh) * m);
-      ctx.lineTo((cx + rw - r) * m, (cy - rh) * m);
-      ctx.quadraticCurveTo((cx + rw) * m, (cy - rh) * m, (cx + rw) * m, (cy - rh + r) * m);
-      ctx.lineTo((cx + rw) * m, (cy + rh - r) * m);
-      ctx.quadraticCurveTo((cx + rw) * m, (cy + rh) * m, (cx + rw - r) * m, (cy + rh) * m);
-      ctx.lineTo((cx - rw + r) * m, (cy + rh) * m);
-      ctx.quadraticCurveTo((cx - rw) * m, (cy + rh) * m, (cx - rw) * m, (cy + rh - r) * m);
-      ctx.lineTo((cx - rw) * m, (cy - rh + r) * m);
-      ctx.quadraticCurveTo((cx - rw) * m, (cy - rh) * m, (cx - rw + r) * m, (cy - rh) * m);
+      ctx.moveTo(points[0].x * m, points[0].y * m);
+      for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x * m, points[i].y * m);
       ctx.closePath();
       ctx.fill();
 
-      ctx.strokeStyle = '#6fa4ff';
-      ctx.lineWidth = 1.25;
+      // Thin white line separating glass from hull edge.
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.15;
       ctx.stroke();
 
-      ctx.fillStyle = 'rgba(255,255,255,0.38)';
+      // Subtle reflection highlight.
+      const hi = points[0];
+      const hj = points[1];
+      ctx.strokeStyle = 'rgba(180,220,255,0.55)';
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.arc((cx - rw * 0.28) * m, (cy - rh * 0.2) * m, Math.max(1.4, rw * m * 0.19), 0, Math.PI * 2);
-      ctx.fill();
+      ctx.moveTo((hi.x + (hj.x - hi.x) * 0.18) * m, (hi.y + 0.01) * m);
+      ctx.lineTo((hi.x + (hj.x - hi.x) * 0.82) * m, (hj.y + 0.01) * m);
+      ctx.stroke();
     }
-    drawWindow(-0.46, -0.16, 0.22, 0.11);
-    drawWindow(0.46, -0.16, 0.22, 0.11);
 
-    // Centered recycle logo on hull (stacked to fit ship width)
-    ctx.fillStyle = '#1f8f3a';
-    ctx.font = `bold ${Math.max(10, m * 0.2)}px monospace`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('Recycle', 0, -0.16 * m);
-    ctx.fillText('Hero', 0, 0.02 * m);
+    // Larger front windscreen near ship nose.
+    drawWindscreen([
+      { x: -0.58, y: -0.46 },
+      { x: 0.58, y: -0.46 },
+      { x: 0.39, y: -0.19 },
+      { x: -0.39, y: -0.19 },
+    ]);
+
+    // Larger rear windscreen near upper-mid hull.
+    drawWindscreen([
+      { x: -0.47, y: -0.14 },
+      { x: 0.47, y: -0.14 },
+      { x: 0.34, y: 0.1 },
+      { x: -0.34, y: 0.1 },
+    ]);
 
     if (drawGearVisual) {
       // Feet (bright red), centered at each leg endpoint.
