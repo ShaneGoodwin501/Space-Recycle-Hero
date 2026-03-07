@@ -48,7 +48,7 @@ No package manager, dependencies, or build process is needed.
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/<your-org-or-user>/Space-Recycle-Hero.git
+   git clone [https://github.com/<your-org-or-user>/Space-Recycle-Hero.git](https://github.com/ShaneGoodwin501/Space-Recycle-Hero.git)
    cd Space-Recycle-Hero
    ```
 2. Start a static server from the project root (example with Python):
