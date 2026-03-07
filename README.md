@@ -10,6 +10,7 @@
 - [Installation & Running](#installation--running)
   - [Option 1: Run locally (quick start)](#option-1-run-locally-quick-start)
   - [Option 2: Deploy with Apache on Ubuntu](#option-2-deploy-with-apache-on-ubuntu)
+  - [Option 3: Configure Apache2 and PHP hosting step by step](#option-3-configure-apache2-and-php-hosting-step-by-step)
 - [How to Play](#how-to-play)
   - [Mission flow](#mission-flow)
   - [Scoring](#scoring)
@@ -47,34 +48,99 @@
 No package manager, dependencies, or build process is needed.
 
 1. Clone the repository:
-   ```bash
    git clone https://github.com/ShaneGoodwin501/Space-Recycle-Hero.git
    cd Space-Recycle-Hero
-   ```
+
 2. Start a static server from the project root (example with Python):
-   ```bash
    python3 -m http.server 8080
-   ```
+
 3. Open the game in your browser:
-   ```text
    http://localhost:8080
-   ```
 
 > You can also open `index.html` directly in some browsers, but serving over HTTP is recommended.
 
 ### Option 2: Deploy with Apache on Ubuntu
 1. Copy the project into Apache's web root:
-   ```bash
    sudo cp -r Space-Recycle-Hero /var/www/html/lunar-cargo
-   ```
+
 2. Ensure Apache is installed and running:
-   ```bash
    sudo systemctl enable --now apache2
-   ```
+
 3. Open:
-   ```text
    http://<server-ip>/lunar-cargo/
-   ```
+
+### Option 3: Configure Apache2 and PHP hosting step by step
+1. Update package lists:
+   sudo apt update
+
+2. Install Apache2 and PHP:
+   sudo apt install -y apache2 php libapache2-mod-php
+
+3. Enable and start Apache:
+   sudo systemctl enable --now apache2
+
+4. Confirm Apache is running:
+   sudo systemctl status apache2
+
+5. Create a directory for the game:
+   sudo mkdir -p /var/www/html/lunar-cargo
+
+6. Copy the game files into the web directory:
+   sudo cp -r Space-Recycle-Hero/* /var/www/html/lunar-cargo/
+
+7. Set Apache ownership and safe permissions:
+   sudo chown -R www-data:www-data /var/www/html/lunar-cargo
+   sudo find /var/www/html/lunar-cargo -type d -exec chmod 755 {} \;
+   sudo find /var/www/html/lunar-cargo -type f -exec chmod 644 {} \;
+
+8. Create a simple Apache virtual host:
+   sudo nano /etc/apache2/sites-available/lunar-cargo.conf
+
+9. Add this configuration:
+
+   <VirtualHost *:80>
+       ServerAdmin webmaster@localhost
+       DocumentRoot /var/www/html/lunar-cargo
+
+       <Directory /var/www/html/lunar-cargo>
+           Options Indexes FollowSymLinks
+           AllowOverride All
+           Require all granted
+       </Directory>
+
+       DirectoryIndex index.html index.php
+
+       ErrorLog ${APACHE_LOG_DIR}/lunar-cargo-error.log
+       CustomLog ${APACHE_LOG_DIR}/lunar-cargo-access.log combined
+   </VirtualHost>
+
+10. Enable the site and disable the default site if desired:
+    sudo a2ensite lunar-cargo.conf
+    sudo a2dissite 000-default.conf
+
+11. Test the Apache configuration:
+    sudo apache2ctl configtest
+
+12. Reload Apache:
+    sudo systemctl reload apache2
+
+13. Allow web traffic through the firewall if UFW is enabled:
+    sudo ufw allow 'Apache Full'
+
+14. Verify PHP is working by creating a test file:
+    echo "<?php phpinfo(); ?>" | sudo tee /var/www/html/lunar-cargo/info.php
+
+15. Open in your browser:
+    http://<server-ip>/
+    http://<server-ip>/info.php
+
+16. After confirming PHP works, remove the test file for security:
+    sudo rm /var/www/html/lunar-cargo/info.php
+
+17. Open the game:
+    http://<server-ip>/
+
+> This game is static HTML/CSS/JavaScript, so PHP is not required for gameplay itself, but installing PHP is useful if you want the server ready for future scoreboards, login systems, admin tools, or other dynamic features.
 
 ## How to Play
 
@@ -189,5 +255,5 @@ If you want to tweak difficulty, this is the best place to start.
   - Interact once (keypress/click) to unlock browser audio context.
 - **Game looks stretched or clipped:**
   - Resize the browser window; the canvas resizes dynamically.
-- **Direct file open issues (`file://`)**:
+- **Direct file open issues (`file://`):**
   - Run with a local HTTP server instead.
