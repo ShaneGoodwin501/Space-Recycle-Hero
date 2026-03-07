@@ -191,6 +191,3 @@ If you want to tweak difficulty, this is the best place to start.
   - Resize the browser window; the canvas resizes dynamically.
 - **Direct file open issues (`file://`)**:
   - Run with a local HTTP server instead.
-
----
-If you'd like, a future update can add a "Developer" section with modding notes, entity data reference, and contribution guidelines.
