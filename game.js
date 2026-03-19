@@ -2248,6 +2248,17 @@
     const panelH = h - Math.max(12, Math.floor(24 * uiScale));
     const panelY = y + Math.max(6, Math.floor(12 * uiScale));
 
+    function fitFontSize(text, maxW, preferredSize, minSize, fontFamily, fontWeight = 'bold') {
+      let size = Math.max(minSize, preferredSize);
+      while (size > minSize) {
+        ctx.font = `${fontWeight} ${size}px ${fontFamily}`;
+        if (ctx.measureText(text).width <= maxW) break;
+        size -= 1;
+      }
+      ctx.font = `${fontWeight} ${size}px ${fontFamily}`;
+      return size;
+    }
+
     function drawBar(x, w, label, value, unit = '%') {
       ctx.fillStyle = '#000';
       ctx.fillRect(x, panelY, w, panelH);
@@ -2452,11 +2463,26 @@
     ctx.strokeStyle = '#0b5';
     ctx.strokeRect(dX, panelY, distW, panelH);
     const dist = distanceToGroundMeters();
+    const distPadX = 12;
+    const distLabelMaxW = Math.max(24, distW - distPadX * 2);
+    const distValue = `${dist.toFixed(1)} m`;
     ctx.fillStyle = '#7dff9c';
-    ctx.font = `bold ${Math.max(10, Math.floor(15 * uiScale))}px Segoe UI`;
-    ctx.fillText('DISTANCE TO GROUND', dX + 12, panelY + 22);
-    ctx.font = `bold ${Math.max(16, Math.floor(44 * uiScale))}px "Consolas", monospace`;
-    ctx.fillText(`${dist.toFixed(1)} m`, dX + 12, panelY + panelH * 0.72);
+    const distLabelSize = fitFontSize(
+      'DISTANCE TO GROUND',
+      distLabelMaxW,
+      Math.max(10, Math.floor(15 * uiScale)),
+      8,
+      'Segoe UI'
+    );
+    ctx.fillText('DISTANCE TO GROUND', dX + distPadX, panelY + Math.max(16, distLabelSize + 7));
+    fitFontSize(
+      distValue,
+      distLabelMaxW,
+      Math.max(16, Math.floor(44 * uiScale)),
+      12,
+      '"Consolas", monospace'
+    );
+    ctx.fillText(distValue, dX + distPadX, panelY + panelH * 0.72);
     cursorX += distW + gap;
 
     const radioX = cursorX;
