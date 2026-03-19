@@ -2248,7 +2248,26 @@
     const panelH = h - Math.max(12, Math.floor(24 * uiScale));
     const panelY = y + Math.max(6, Math.floor(12 * uiScale));
 
+    function fitFontSize(text, maxW, preferredSize, minSize, fontFamily, fontWeight = 'bold') {
+      let size = Math.max(minSize, preferredSize);
+      while (size > minSize) {
+        ctx.font = `${fontWeight} ${size}px ${fontFamily}`;
+        if (ctx.measureText(text).width <= maxW) break;
+        size -= 1;
+      }
+      ctx.font = `${fontWeight} ${size}px ${fontFamily}`;
+      return size;
+    }
+
+    function drawFittedText(text, x, y, maxW, preferredSize, minSize, fontFamily, fontWeight = 'bold') {
+      fitFontSize(text, maxW, preferredSize, minSize, fontFamily, fontWeight);
+      ctx.fillText(text, x, y);
+    }
+
     function drawBar(x, w, label, value, unit = '%') {
+      const padX = Math.max(6, Math.floor(8 * uiScale));
+      const maxTextW = Math.max(18, w - padX * 2);
+      const valueText = `${Math.round(value * 100)}${unit}`;
       ctx.fillStyle = '#000';
       ctx.fillRect(x, panelY, w, panelH);
       ctx.strokeStyle = '#0b5';
@@ -2257,10 +2276,8 @@
       const fillW = Math.max(0, Math.min(1, value)) * (w - 18);
       ctx.fillRect(x + 9, panelY + panelH * 0.55, fillW, panelH * 0.28);
       ctx.fillStyle = '#7dff9c';
-      ctx.font = `bold ${Math.max(10, Math.floor(14 * uiScale))}px Segoe UI`;
-      ctx.fillText(label, x + 8, panelY + Math.max(14, Math.floor(20 * uiScale)));
-      ctx.font = `bold ${Math.max(11, Math.floor(18 * uiScale))}px Consolas, monospace`;
-      ctx.fillText(`${Math.round(value * 100)}${unit}`, x + 8, panelY + Math.max(30, Math.floor(44 * uiScale)));
+      drawFittedText(label, x + padX, panelY + Math.max(14, Math.floor(20 * uiScale)), maxTextW, Math.max(10, Math.floor(14 * uiScale)), 7, 'Segoe UI');
+      drawFittedText(valueText, x + padX, panelY + Math.max(30, Math.floor(44 * uiScale)), maxTextW, Math.max(11, Math.floor(18 * uiScale)), 8, 'Consolas, monospace');
     }
 
     const panelWeights = {
@@ -2321,8 +2338,7 @@
     ctx.stroke();
     ctx.restore();
     ctx.fillStyle = '#7dff9c';
-    ctx.font = `bold ${Math.max(10, Math.floor(13 * uiScale))}px Segoe UI`;
-    ctx.fillText('ATTITUDE', attitudeX + 8, panelY + 16);
+    drawFittedText('ATTITUDE', attitudeX + 8, panelY + 16, Math.max(18, attitudePanelW - 16), Math.max(10, Math.floor(13 * uiScale)), 7, 'Segoe UI');
     cursorX += attitudePanelW + gap;
 
     const speedX = cursorX;
@@ -2388,10 +2404,10 @@
     ctx.restore();
 
     ctx.fillStyle = '#7dff9c';
-    ctx.font = `bold ${Math.max(10, Math.floor(13 * uiScale))}px Segoe UI`;
-    ctx.fillText('SPEED', speedX + 10, panelY + 16);
-    ctx.font = `bold ${Math.max(10, Math.floor(14 * uiScale))}px "Consolas", monospace`;
-    ctx.fillText(`${speedMps.toFixed(1)} m/s`, speedX + 10, panelY + panelH - 10);
+    const speedPadX = 10;
+    const speedTextW = Math.max(18, speedW - speedPadX * 2);
+    drawFittedText('SPEED', speedX + speedPadX, panelY + 16, speedTextW, Math.max(10, Math.floor(13 * uiScale)), 7, 'Segoe UI');
+    drawFittedText(`${speedMps.toFixed(1)} m/s`, speedX + speedPadX, panelY + panelH - 10, speedTextW, Math.max(10, Math.floor(14 * uiScale)), 8, '"Consolas", monospace');
     cursorX += speedW + gap;
 
     const weightX = cursorX;
@@ -2439,11 +2455,11 @@
     ctx.restore();
 
     ctx.fillStyle = '#7dff9c';
-    ctx.font = `bold ${Math.max(10, Math.floor(13 * uiScale))}px Segoe UI`;
-    ctx.fillText('WEIGHT', weightX + 10, panelY + 16);
-    ctx.font = `bold ${Math.max(10, Math.floor(14 * uiScale))}px "Consolas", monospace`;
-    ctx.fillText(`${shipMass().toFixed(2)} t`, weightX + 10, panelY + panelH - 24);
-    ctx.fillText(`CARGO ${cargoCount}/${CONFIG.trayCapacity}`, weightX + 10, panelY + panelH - 8);
+    const weightPadX = 10;
+    const weightTextW = Math.max(18, weightW - weightPadX * 2);
+    drawFittedText('WEIGHT', weightX + weightPadX, panelY + 16, weightTextW, Math.max(10, Math.floor(13 * uiScale)), 7, 'Segoe UI');
+    drawFittedText(`${shipMass().toFixed(2)} t`, weightX + weightPadX, panelY + panelH - 24, weightTextW, Math.max(10, Math.floor(14 * uiScale)), 8, '"Consolas", monospace');
+    drawFittedText(`CARGO ${cargoCount}/${CONFIG.trayCapacity}`, weightX + weightPadX, panelY + panelH - 8, weightTextW, Math.max(10, Math.floor(14 * uiScale)), 7, '"Consolas", monospace');
     cursorX += weightW + gap;
 
     const dX = cursorX;
@@ -2452,11 +2468,19 @@
     ctx.strokeStyle = '#0b5';
     ctx.strokeRect(dX, panelY, distW, panelH);
     const dist = distanceToGroundMeters();
+    const distPadX = 12;
+    const distLabelMaxW = Math.max(18, distW - distPadX * 2);
+    const distValue = `${dist.toFixed(1)} m`;
     ctx.fillStyle = '#7dff9c';
-    ctx.font = `bold ${Math.max(10, Math.floor(15 * uiScale))}px Segoe UI`;
-    ctx.fillText('DISTANCE TO GROUND', dX + 12, panelY + 22);
-    ctx.font = `bold ${Math.max(16, Math.floor(44 * uiScale))}px "Consolas", monospace`;
-    ctx.fillText(`${dist.toFixed(1)} m`, dX + 12, panelY + panelH * 0.72);
+    const distLabelSize = fitFontSize(
+      'DISTANCE TO GROUND',
+      distLabelMaxW,
+      Math.max(10, Math.floor(15 * uiScale)),
+      7,
+      'Segoe UI'
+    );
+    ctx.fillText('DISTANCE TO GROUND', dX + distPadX, panelY + Math.max(16, distLabelSize + 7));
+    drawFittedText(distValue, dX + distPadX, panelY + panelH * 0.72, distLabelMaxW, Math.max(16, Math.floor(44 * uiScale)), 8, '"Consolas", monospace');
     cursorX += distW + gap;
 
     const radioX = cursorX;
@@ -2474,10 +2498,10 @@
     ctx.strokeStyle = '#0b5';
     ctx.strokeRect(scoreX, panelY, scoreW, panelH);
     ctx.fillStyle = '#7dff9c';
-    ctx.font = `bold ${Math.max(10, Math.floor(15 * uiScale))}px Segoe UI`;
-    ctx.fillText('SCORE', scoreX + 12, panelY + 22);
-    ctx.font = `bold ${Math.max(18, Math.floor(46 * uiScale))}px "Consolas", monospace`;
-    ctx.fillText(`${game.score}`, scoreX + 12, panelY + panelH * 0.74);
+    const scorePadX = 12;
+    const scoreTextW = Math.max(18, scoreW - scorePadX * 2);
+    drawFittedText('SCORE', scoreX + scorePadX, panelY + 22, scoreTextW, Math.max(10, Math.floor(15 * uiScale)), 7, 'Segoe UI');
+    drawFittedText(`${game.score}`, scoreX + scorePadX, panelY + panelH * 0.74, scoreTextW, Math.max(18, Math.floor(46 * uiScale)), 8, '"Consolas", monospace');
   }
 
 
