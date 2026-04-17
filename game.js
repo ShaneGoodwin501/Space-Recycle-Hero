@@ -685,30 +685,37 @@
   function updateBackgroundBattle(dt) {
     const skyMinY = 1.2;
     const skyMaxY = 13.2;
-    const worldPad = 28;
+    const worldSpan = CONFIG.worldWidth + 40;
 
     while (game.bgBattleShips.length < CONFIG.bgBattleShipCount) {
       game.bgBattleShips.push(spawnBackgroundBattleShip(Math.random() < 0.5 ? 'a' : 'b'));
     }
 
     for (const shipFx of game.bgBattleShips) {
-      shipFx.life -= dt;
       shipFx.cooldown -= dt;
       shipFx.thrustPhase += dt * (2.8 + Math.random() * 0.8);
-      const target = game.bgBattleShips.find((other) => other !== shipFx && other.team !== shipFx.team);
+      let target = null;
+      let targetDist = Infinity;
+      for (const other of game.bgBattleShips) {
+        if (other === shipFx || other.team === shipFx.team) continue;
+        const d = Math.hypot(other.x - shipFx.x, other.y - shipFx.y);
+        if (d < targetDist) {
+          target = other;
+          targetDist = d;
+        }
+      }
       if (target) {
         const dx = target.x - shipFx.x;
         const dy = target.y - shipFx.y;
-        const desiredVx = clamp(dx * 0.35, -2.8, 2.8);
-        const desiredVy = clamp(dy * 0.52, -0.95, 0.95);
-        shipFx.vx = lerp(shipFx.vx, desiredVx, clamp(1.05 * dt, 0, 1));
-        shipFx.vy = lerp(shipFx.vy, desiredVy, clamp(1.65 * dt, 0, 1));
+        const desiredVx = clamp(dx * 0.55, -4.5, 4.5);
+        const desiredVy = clamp(dy * 0.8 + Math.sin(shipFx.thrustPhase) * 0.35, -1.9, 1.9);
+        shipFx.vx = lerp(shipFx.vx, desiredVx, clamp(1.75 * dt, 0, 1));
+        shipFx.vy = lerp(shipFx.vy, desiredVy, clamp(2.2 * dt, 0, 1));
         shipFx.dir = shipFx.vx >= 0 ? 1 : -1;
 
         const dist = Math.hypot(dx, dy);
-        const hasLine = Math.abs(dy) < 1.8;
-        if (shipFx.cooldown <= 0 && dist < 28 && hasLine) {
-          const speed = 22;
+        if (shipFx.cooldown <= 0 && dist < 34) {
+          const speed = 28;
           const aimX = dx / Math.max(0.001, dist);
           const aimY = dy / Math.max(0.001, dist);
           game.bgBattleBolts.push({
@@ -719,12 +726,21 @@
             team: shipFx.team,
             life: 1.4,
           });
-          shipFx.cooldown = 0.22 + Math.random() * 0.95;
+          shipFx.cooldown = 0.1 + Math.random() * 0.35;
         }
       }
 
       shipFx.x += shipFx.vx * dt;
-      shipFx.y = clamp(shipFx.y + shipFx.vy * dt, skyMinY, skyMaxY);
+      shipFx.y += shipFx.vy * dt;
+
+      // Wrap ships around edges so they keep looping around the whole sky.
+      if (shipFx.x < -20) shipFx.x += worldSpan;
+      if (shipFx.x > CONFIG.worldWidth + 20) shipFx.x -= worldSpan;
+      if (shipFx.y < skyMinY) {
+        shipFx.y = skyMaxY - 0.25;
+      } else if (shipFx.y > skyMaxY) {
+        shipFx.y = skyMinY + 0.25;
+      }
     }
 
     for (const bolt of game.bgBattleBolts) {
@@ -749,10 +765,7 @@
 
     for (const burst of game.bgBattleBursts) burst.life -= dt;
 
-    game.bgBattleShips = game.bgBattleShips.filter((shipFx) => {
-      const inBounds = shipFx.x > -worldPad && shipFx.x < CONFIG.worldWidth + worldPad;
-      return shipFx.hp > 0 && shipFx.life > 0 && inBounds;
-    });
+    game.bgBattleShips = game.bgBattleShips.filter((shipFx) => shipFx.hp > 0);
     game.bgBattleBolts = game.bgBattleBolts.filter((bolt) => bolt.life > 0);
     game.bgBattleBursts = game.bgBattleBursts.filter((burst) => burst.life > 0);
   }
@@ -768,7 +781,7 @@
     for (const bolt of game.bgBattleBolts) {
       const s = toScreen(bolt.x, bolt.y);
       if (s.x < -8 || s.x > W + 8 || s.y < -8 || s.y > clipBottom) continue;
-      ctx.strokeStyle = bolt.team === 'a' ? '#ff5ea8' : '#72ffcf';
+      ctx.strokeStyle = '#ff3b3b';
       ctx.lineWidth = 1.4;
       ctx.beginPath();
       ctx.moveTo(s.x, s.y);
