@@ -56,8 +56,8 @@
 
 
   const THEME = {
-    skyTop: '#68d9ff',
-    skyBottom: '#1d62d5',
+    skyTop: '#1d5fc9',
+    skyBottom: '#0a2f86',
     cloudGlow: 'rgba(199, 255, 245, 0.35)',
     terrain: '#2f9a7f',
     terrainShadow: '#18715c',
@@ -1962,13 +1962,13 @@
   function drawBackground() {
     const sky = ctx.createLinearGradient(0, 0, 0, H);
     sky.addColorStop(0, THEME.skyTop);
-    sky.addColorStop(0.55, '#39a2f5');
+    sky.addColorStop(0.55, '#1450b4');
     sky.addColorStop(1, THEME.skyBottom);
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, W, H);
 
     const sun = ctx.createRadialGradient(W * 0.12, H * 0.2, 20, W * 0.12, H * 0.2, Math.min(W, H) * 0.3);
-    sun.addColorStop(0, 'rgba(255,255,210,0.72)');
+    sun.addColorStop(0, 'rgba(220,235,255,0.4)');
     sun.addColorStop(1, 'rgba(255,255,210,0)');
     ctx.fillStyle = sun;
     ctx.fillRect(0, 0, W, H);

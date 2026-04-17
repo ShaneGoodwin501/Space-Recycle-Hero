@@ -1,7 +1,7 @@
 :root {
-  --bg-ocean-1: #67dfff;
-  --bg-ocean-2: #2e8eff;
-  --bg-ocean-3: #1a4cb9;
+  --bg-ocean-1: #2c72d9;
+  --bg-ocean-2: #174ca8;
+  --bg-ocean-3: #0a2f7f;
   --hud-bg: rgba(8, 34, 76, 0.84);
   --hud-border: #62ffd4;
   --hud-text: #d8fff7;
@@ -13,7 +13,7 @@ html, body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: radial-gradient(circle at 20% 12%, #a8f8ff 0%, var(--bg-ocean-1) 20%, var(--bg-ocean-2) 55%, var(--bg-ocean-3) 100%);
+  background: radial-gradient(circle at 20% 12%, #4d8fdf 0%, var(--bg-ocean-1) 20%, var(--bg-ocean-2) 55%, var(--bg-ocean-3) 100%);
   font-family: "Segoe UI", Tahoma, sans-serif;
 }
 
@@ -25,7 +25,7 @@ body {
   display: block;
   width: 100vw;
   height: 100vh;
-  background: linear-gradient(180deg, #6ee0ff 0%, #2380f2 52%, #1c53c7 100%);
+  background: linear-gradient(180deg, #2f73ce 0%, #1b56b5 52%, #0b378f 100%);
 }
 
 #radioHud {
