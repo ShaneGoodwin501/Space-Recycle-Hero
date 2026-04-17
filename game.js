@@ -714,7 +714,7 @@
         shipFx.dir = shipFx.vx >= 0 ? 1 : -1;
 
         const dist = Math.hypot(dx, dy);
-        if (shipFx.cooldown <= 0 && dist < 34) {
+        if (shipFx.cooldown <= 0) {
           const speed = 28;
           const aimX = dx / Math.max(0.001, dist);
           const aimY = dy / Math.max(0.001, dist);
@@ -724,9 +724,9 @@
             vx: aimX * speed + shipFx.vx * 0.18,
             vy: aimY * speed + shipFx.vy * 0.18,
             team: shipFx.team,
-            life: 1.4,
+            life: 1.8,
           });
-          shipFx.cooldown = 0.1 + Math.random() * 0.35;
+          shipFx.cooldown = 0.08 + Math.random() * 0.22;
         }
       }
 
@@ -744,6 +744,26 @@
     }
 
     for (const bolt of game.bgBattleBolts) {
+      // Slight homing keeps firefights visibly active and avoids bolts just passing by forever.
+      let nearest = null;
+      let nearestDist = Infinity;
+      for (const shipFx of game.bgBattleShips) {
+        if (shipFx.team === bolt.team) continue;
+        const d = Math.hypot(shipFx.x - bolt.x, shipFx.y - bolt.y);
+        if (d < nearestDist) {
+          nearestDist = d;
+          nearest = shipFx;
+        }
+      }
+      if (nearest) {
+        const dx = nearest.x - bolt.x;
+        const dy = nearest.y - bolt.y;
+        const d = Math.max(0.001, Math.hypot(dx, dy));
+        const desiredVx = (dx / d) * 30;
+        const desiredVy = (dy / d) * 30;
+        bolt.vx = lerp(bolt.vx, desiredVx, clamp(1.6 * dt, 0, 1));
+        bolt.vy = lerp(bolt.vy, desiredVy, clamp(1.6 * dt, 0, 1));
+      }
       bolt.x += bolt.vx * dt;
       bolt.y += bolt.vy * dt;
       bolt.life -= dt;
@@ -1951,18 +1971,19 @@
     const skyLeftLimit = Math.max(30, W * 0.04);
     const skyRightLimit = Math.min(W - 30, W * 0.96);
 
-    const roamXNorm = 0.5 + 0.42 * Math.sin(bgTime * 0.11 + 0.9) + 0.08 * Math.sin(bgTime * 0.23 + 1.6);
-    const roamYNorm = 0.46 + 0.36 * Math.sin(bgTime * 0.14 + 2.3) + 0.08 * Math.cos(bgTime * 0.29 + 0.2);
+    const stationTime = bgTime * 0.3; // slow station movement to 30% speed
+    const roamXNorm = 0.5 + 0.42 * Math.sin(stationTime * 0.11 + 0.9) + 0.08 * Math.sin(stationTime * 0.23 + 1.6);
+    const roamYNorm = 0.46 + 0.36 * Math.sin(stationTime * 0.14 + 2.3) + 0.08 * Math.cos(stationTime * 0.29 + 0.2);
 
     const issAnchorX = lerp(skyLeftLimit, skyRightLimit, clamp(roamXNorm, 0, 1));
     const issAnchorY = lerp(skyTopLimit, skyBottomLimit, clamp(roamYNorm, 0, 1));
 
-    const issX = issAnchorX - game.camera.x * 0.045 * CONFIG.METER_TO_PX + Math.sin(bgTime * 0.37) * 6;
-    const issY = issAnchorY - game.camera.y * 0.02 * CONFIG.METER_TO_PX + Math.cos(bgTime * 0.41) * 4;
+    const issX = issAnchorX - game.camera.x * 0.045 * CONFIG.METER_TO_PX + Math.sin(stationTime * 0.37) * 6;
+    const issY = issAnchorY - game.camera.y * 0.02 * CONFIG.METER_TO_PX + Math.cos(stationTime * 0.41) * 4;
     ctx.save();
     ctx.translate(issX, issY);
     ctx.rotate(Math.sin(bgTime * 0.2) * 0.06 - 0.08);
-    ctx.globalAlpha = 0.88;
+    ctx.globalAlpha = 1;
     ctx.fillStyle = '#9fb0c7';
     ctx.fillRect(-8 * issScale, -3 * issScale, 16 * issScale, 6 * issScale);
     ctx.fillStyle = '#6d7f98';
