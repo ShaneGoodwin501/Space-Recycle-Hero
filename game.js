@@ -46,6 +46,7 @@
 
     supplyShipIntervalSec: 36,
     supplyDropsPerShip: 4,
+    bgBattleShipCount: 8,
     trackDeployRate: 5.5,
     trackDriveAccel: 4.8,
     trackDriveMaxSpeed: 1.35,
@@ -548,6 +549,9 @@
     audio: null,
     supplyShips: [],
     supplySpawnTimer: CONFIG.supplyShipIntervalSec,
+    bgBattleShips: [],
+    bgBattleBolts: [],
+    bgBattleBursts: [],
     lastRefuelChimeFuel: 0,
     wasLanded: true,
     radioMessage: { text: '', timer: 0 },
@@ -646,12 +650,185 @@
     }
   }
 
+  function randomSkyBattleY() {
+    return 2.5 + Math.random() * 9.2;
+  }
+
+  function spawnBackgroundBattleShip(team = (Math.random() < 0.5 ? 'a' : 'b')) {
+    const dir = team === 'a' ? 1 : -1;
+    const x = dir > 0
+      ? -8 - Math.random() * 20
+      : CONFIG.worldWidth + 8 + Math.random() * 20;
+    return {
+      x,
+      y: randomSkyBattleY(),
+      vx: (2 + Math.random() * 2.2) * dir,
+      vy: (Math.random() - 0.5) * 0.35,
+      dir,
+      team,
+      hp: 1,
+      cooldown: 0.35 + Math.random() * 1.4,
+      life: 26 + Math.random() * 18,
+      thrustPhase: Math.random() * Math.PI * 2,
+    };
+  }
+
+  function resetBackgroundBattle() {
+    game.bgBattleShips = [];
+    game.bgBattleBolts = [];
+    game.bgBattleBursts = [];
+    for (let i = 0; i < CONFIG.bgBattleShipCount; i++) {
+      game.bgBattleShips.push(spawnBackgroundBattleShip(i % 2 === 0 ? 'a' : 'b'));
+    }
+  }
+
+  function updateBackgroundBattle(dt) {
+    const skyMinY = 1.2;
+    const skyMaxY = 13.2;
+    const worldPad = 28;
+
+    while (game.bgBattleShips.length < CONFIG.bgBattleShipCount) {
+      game.bgBattleShips.push(spawnBackgroundBattleShip(Math.random() < 0.5 ? 'a' : 'b'));
+    }
+
+    for (const shipFx of game.bgBattleShips) {
+      shipFx.life -= dt;
+      shipFx.cooldown -= dt;
+      shipFx.thrustPhase += dt * (2.8 + Math.random() * 0.8);
+      const target = game.bgBattleShips.find((other) => other !== shipFx && other.team !== shipFx.team);
+      if (target) {
+        const dx = target.x - shipFx.x;
+        const dy = target.y - shipFx.y;
+        const desiredVx = clamp(dx * 0.35, -2.8, 2.8);
+        const desiredVy = clamp(dy * 0.52, -0.95, 0.95);
+        shipFx.vx = lerp(shipFx.vx, desiredVx, clamp(1.05 * dt, 0, 1));
+        shipFx.vy = lerp(shipFx.vy, desiredVy, clamp(1.65 * dt, 0, 1));
+        shipFx.dir = shipFx.vx >= 0 ? 1 : -1;
+
+        const dist = Math.hypot(dx, dy);
+        const hasLine = Math.abs(dy) < 1.8;
+        if (shipFx.cooldown <= 0 && dist < 28 && hasLine) {
+          const speed = 22;
+          const aimX = dx / Math.max(0.001, dist);
+          const aimY = dy / Math.max(0.001, dist);
+          game.bgBattleBolts.push({
+            x: shipFx.x + shipFx.dir * 1.2,
+            y: shipFx.y + 0.05,
+            vx: aimX * speed + shipFx.vx * 0.18,
+            vy: aimY * speed + shipFx.vy * 0.18,
+            team: shipFx.team,
+            life: 1.4,
+          });
+          shipFx.cooldown = 0.22 + Math.random() * 0.95;
+        }
+      }
+
+      shipFx.x += shipFx.vx * dt;
+      shipFx.y = clamp(shipFx.y + shipFx.vy * dt, skyMinY, skyMaxY);
+    }
+
+    for (const bolt of game.bgBattleBolts) {
+      bolt.x += bolt.vx * dt;
+      bolt.y += bolt.vy * dt;
+      bolt.life -= dt;
+      for (const shipFx of game.bgBattleShips) {
+        if (shipFx.team === bolt.team) continue;
+        if (Math.hypot(shipFx.x - bolt.x, shipFx.y - bolt.y) < 0.75) {
+          shipFx.hp -= 1;
+          bolt.life = 0;
+          game.bgBattleBursts.push({
+            x: shipFx.x,
+            y: shipFx.y,
+            life: 0.7,
+            r: 0.25 + Math.random() * 0.18,
+          });
+          break;
+        }
+      }
+    }
+
+    for (const burst of game.bgBattleBursts) burst.life -= dt;
+
+    game.bgBattleShips = game.bgBattleShips.filter((shipFx) => {
+      const inBounds = shipFx.x > -worldPad && shipFx.x < CONFIG.worldWidth + worldPad;
+      return shipFx.hp > 0 && shipFx.life > 0 && inBounds;
+    });
+    game.bgBattleBolts = game.bgBattleBolts.filter((bolt) => bolt.life > 0);
+    game.bgBattleBursts = game.bgBattleBursts.filter((burst) => burst.life > 0);
+  }
+
+  function drawBackgroundBattle() {
+    const gameplayH = getGameplayHeight();
+    const clipBottom = gameplayH - 14;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, W, clipBottom);
+    ctx.clip();
+
+    for (const bolt of game.bgBattleBolts) {
+      const s = toScreen(bolt.x, bolt.y);
+      if (s.x < -8 || s.x > W + 8 || s.y < -8 || s.y > clipBottom) continue;
+      ctx.strokeStyle = bolt.team === 'a' ? '#ff5ea8' : '#72ffcf';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(s.x, s.y);
+      ctx.lineTo(s.x - bolt.vx * 0.35, s.y - bolt.vy * 0.35);
+      ctx.stroke();
+    }
+
+    for (const burst of game.bgBattleBursts) {
+      const s = toScreen(burst.x, burst.y);
+      if (s.x < -20 || s.x > W + 20 || s.y < -20 || s.y > clipBottom + 4) continue;
+      const t = clamp(burst.life / 0.7, 0, 1);
+      const r = (1 - t) * 20 + 6;
+      const grad = ctx.createRadialGradient(s.x, s.y, 1, s.x, s.y, r);
+      grad.addColorStop(0, `rgba(255,250,200,${0.95 * t})`);
+      grad.addColorStop(0.45, `rgba(255,152,72,${0.8 * t})`);
+      grad.addColorStop(1, `rgba(255,64,64,0)`);
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    for (const shipFx of game.bgBattleShips) {
+      const s = toScreen(shipFx.x, shipFx.y);
+      if (s.x < -30 || s.x > W + 30 || s.y < -20 || s.y > clipBottom + 4) continue;
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.scale(shipFx.dir, 1);
+      ctx.globalAlpha = 0.8;
+      ctx.fillStyle = shipFx.team === 'a' ? '#ff7cc4' : '#7ef7df';
+      ctx.beginPath();
+      ctx.moveTo(10, 0);
+      ctx.lineTo(-9, -5);
+      ctx.lineTo(-5, 0);
+      ctx.lineTo(-9, 5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#d9f2ff';
+      ctx.fillRect(-2, -1.5, 4.5, 3);
+      ctx.fillStyle = '#9be3ff';
+      const flame = 2 + Math.sin(shipFx.thrustPhase) * 1.8;
+      ctx.beginPath();
+      ctx.moveTo(-9, 0);
+      ctx.lineTo(-9 - flame, -1.7);
+      ctx.lineTo(-9 - flame, 1.7);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    ctx.restore();
+  }
+
   function randomizeWorld() {
     terrain = generateTerrain();
     regenerateStars();
     spawnCargo();
     game.supplyShips = [];
     game.supplySpawnTimer = CONFIG.supplyShipIntervalSec;
+    resetBackgroundBattle();
   }
 
   function startMission() {
@@ -1871,6 +2048,7 @@
       ctx.arc(parallaxX, parallaxY, s.r, 0, Math.PI * 2);
       ctx.fill();
     }
+    drawBackgroundBattle();
     ctx.globalAlpha = 1;
   }
 
@@ -3002,6 +3180,7 @@
       } else if (game.state === 'READY') {
         updateCamera(dt);
       }
+      updateBackgroundBattle(dt);
       updateExplosions(dt);
       if (game.radioMessage.timer > 0) game.radioMessage.timer = Math.max(0, game.radioMessage.timer - dt);
       updateAudio();
