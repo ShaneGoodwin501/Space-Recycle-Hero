@@ -1755,10 +1755,20 @@
     const shipDiameterPx = shipShape.hullRadius * CONFIG.METER_TO_PX * 2;
 
     const issScale = Math.max(0.8, Math.min(1.25, shipDiameterPx / 50));
-    const issAnchorX = W * 0.57 - game.camera.x * 0.065 * CONFIG.METER_TO_PX;
-    const issAnchorY = H * 0.1 - game.camera.y * 0.03 * CONFIG.METER_TO_PX;
-    const issX = issAnchorX + Math.sin(bgTime * 0.17) * Math.min(42, W * 0.035) + Math.sin(bgTime * 0.071 + 1.4) * 14;
-    const issY = issAnchorY + Math.cos(bgTime * 0.13 + 0.8) * Math.min(20, H * 0.025) + Math.sin(bgTime * 0.23) * 6;
+    // Let the station roam across the full visible sky, but never down into the ground/terrain zone.
+    const skyBottomLimit = getGameplayHeight() - Math.max(90, H * 0.18);
+    const skyTopLimit = Math.max(40, H * 0.05);
+    const skyLeftLimit = Math.max(30, W * 0.04);
+    const skyRightLimit = Math.min(W - 30, W * 0.96);
+
+    const roamXNorm = 0.5 + 0.42 * Math.sin(bgTime * 0.11 + 0.9) + 0.08 * Math.sin(bgTime * 0.23 + 1.6);
+    const roamYNorm = 0.46 + 0.36 * Math.sin(bgTime * 0.14 + 2.3) + 0.08 * Math.cos(bgTime * 0.29 + 0.2);
+
+    const issAnchorX = lerp(skyLeftLimit, skyRightLimit, clamp(roamXNorm, 0, 1));
+    const issAnchorY = lerp(skyTopLimit, skyBottomLimit, clamp(roamYNorm, 0, 1));
+
+    const issX = issAnchorX - game.camera.x * 0.045 * CONFIG.METER_TO_PX + Math.sin(bgTime * 0.37) * 6;
+    const issY = issAnchorY - game.camera.y * 0.02 * CONFIG.METER_TO_PX + Math.cos(bgTime * 0.41) * 4;
     ctx.save();
     ctx.translate(issX, issY);
     ctx.rotate(Math.sin(bgTime * 0.2) * 0.06 - 0.08);
