@@ -118,6 +118,10 @@
 
   function setRadioHudLayout(x, y, w, h, uiScale) {
     if (!radioHud) return;
+    if (game?.showHelp) {
+      radioHud.style.display = 'none';
+      return;
+    }
     radioHud.style.display = 'block';
     radioHud.style.left = `${Math.round(x)}px`;
     radioHud.style.top = `${Math.round(y)}px`;
@@ -2666,68 +2670,34 @@
 
 
   function drawMissionHelpPanel() {
-    const baseScale = clamp(Math.min(W / 1600, H / 980), 0.52, 1.15);
-    const panelW = clamp(W * 0.92, 540, 1260);
-    const panelH = clamp(H * 0.9, 420, 880);
-    const panelX = Math.floor((W - panelW) * 0.5);
-    const panelY = Math.floor((H - panelH) * 0.5);
+    const margin = clamp(Math.min(W, H) * 0.035, 10, 28);
+    const panelX = margin;
+    const panelY = margin;
+    const panelW = Math.max(300, W - margin * 2);
+    const panelH = Math.max(220, H - margin * 2);
 
-    let uiScale = baseScale;
-    for (let i = 0; i < 7; i++) {
-      const titleTry = Math.floor(clamp(44 * uiScale, 22, 56));
-      const subtitleTry = Math.floor(clamp(24 * uiScale, 15, 32));
-      const bodyTry = Math.floor(clamp(15 * uiScale, 10, 20));
-      const sectionTry = Math.floor(clamp(18 * uiScale, 12, 24));
-      const capHTry = Math.floor(clamp(36 * uiScale, 20, 44));
-      const lineHTry = Math.floor(clamp(bodyTry * 1.3, 13, 26));
-      const colPadTry = Math.floor(clamp(28 * uiScale, 12, 34));
-      const footerLinesTry = 2;
-      const estimatedStart = colPadTry + titleTry + subtitleTry + sectionTry * 3 + lineHTry * (3 + 4 + 4) + 90 * uiScale;
-      const availableForControls = panelH - colPadTry - (lineHTry * footerLinesTry) - estimatedStart;
-      const neededControls = 12 * (capHTry + Math.floor(clamp(8 * uiScale, 4, 9)));
-      if (neededControls <= availableForControls) break;
-      uiScale *= 0.9;
-    }
+    const compact = panelW < 860;
+    const tiny = panelW < 560 || panelH < 420;
 
-    const titleSize = Math.floor(clamp(44 * uiScale, 22, 56));
-    const subtitleSize = Math.floor(clamp(24 * uiScale, 15, 32));
-    const bodySize = Math.floor(clamp(15 * uiScale, 10, 20));
-    const sectionSize = Math.floor(clamp(18 * uiScale, 12, 24));
-    const keyFont = Math.floor(clamp(14 * uiScale, 9, 19));
+    const titleSize = tiny ? 24 : (compact ? 30 : 38);
+    const subtitleSize = tiny ? 14 : (compact ? 17 : 20);
+    const bodySize = tiny ? 11 : (compact ? 13 : 15);
+    const lineH = Math.round(bodySize * 1.35);
+    const keyFont = tiny ? 10 : 12;
 
     const controls = [
-      { keys: ['A', 'D'], text: 'Rotate the ship left or right while flying.' },
-      { keys: ['W', 'S'], text: 'Increase or decrease engine throttle.' },
-      { keys: ['SPACE'], text: 'Start mission, then open or close the cargo tray.' },
-      { keys: ['I', 'K'], text: 'Rotate the arm base counterclockwise / clockwise.' },
-      { keys: ['U', 'J'], text: 'Move arm segment 1 up / down.' },
-      { keys: ['O', 'L'], text: 'Move arm segment 2 up / down.' },
-      { keys: ['P', ';'], text: 'Close or open the claw to grab cargo.' },
-      { keys: ['F'], text: 'Fold arm down for flight / unfold arm for cargo use.' },
-      { keys: ['E'], text: 'Extend or retract landing gear (2-second movement).' },
-      { keys: ['Q'], text: 'Toggle track mode when landed and stable.' },
-      { keys: ['H'], text: 'Show/hide this help panel.' },
-      { keys: ['ESC'], text: 'Pause/unpause.' },
-    ];
-
-    const storyBlurb = [
-      'Trash Bugs keep dumping junk across the lunar surface, and every new wave makes the Moon a little messier.',
-      'You are the pilot of Space Recycle Hero, hauling debris before the bugs bury the outposts in scrap.',
-      'Grab cargo, sort it, and keep your landings steady to save the Moon one load at a time.',
-    ];
-
-    const howToPlay = [
-      'Collect trash pieces with the arm and claw.',
-      'Deliver cargo to recycle pads to score points.',
-      'Refuel at refuel pads to stay in the mission.',
-      'Land gently on skids for stability.',
-    ];
-
-    const tips = [
-      'Keep the tray closed in rough movement so cargo does not spill.',
-      'Soft touchdowns prevent crashes and give you cleaner pickups.',
-      'Use track mode when landed and stable for precise ground movement.',
-      'If your tray is full, offload before collecting more debris.',
+      { keys: ['A', 'D'], text: 'Rotate ship left / right.' },
+      { keys: ['W', 'S'], text: 'Increase / decrease engine throttle.' },
+      { keys: ['SPACE'], text: 'Start mission, then open/close tray.' },
+      { keys: ['I', 'K'], text: 'Arm base rotate CCW / CW.' },
+      { keys: ['U', 'J'], text: 'Arm segment 1 up / down.' },
+      { keys: ['O', 'L'], text: 'Arm segment 2 up / down.' },
+      { keys: ['P', ';'], text: 'Close / open claw.' },
+      { keys: ['F'], text: 'Fold / unfold arm.' },
+      { keys: ['E'], text: 'Landing gear toggle.' },
+      { keys: ['Q'], text: 'Track mode toggle when landed.' },
+      { keys: ['H'], text: 'Show / hide this panel.' },
+      { keys: ['ESC'], text: 'Pause / unpause.' },
     ];
 
     function roundedRectPath(x, y, w, h, r) {
@@ -2741,7 +2711,7 @@
       ctx.closePath();
     }
 
-    function getWrappedLines(text, maxW, font = `500 ${bodySize}px Segoe UI`) {
+    function getWrappedLines(text, maxW, font) {
       ctx.font = font;
       const words = text.split(' ');
       const lines = [];
@@ -2757,175 +2727,128 @@
       return lines;
     }
 
-    function drawWrappedText(text, x, y, maxW, lineH, color = '#d9e7f8', font = `500 ${bodySize}px Segoe UI`, align = 'left') {
+    function drawWrappedText(text, x, y, maxW, lh, font, color = '#ecf7ff') {
       const lines = getWrappedLines(text, maxW, font);
       ctx.font = font;
       ctx.fillStyle = color;
-
-      let yy = y;
-      if (align === 'right') {
-        ctx.textAlign = 'right';
-        for (const ln of lines) {
-          ctx.fillText(ln, x + maxW, yy);
-          yy += lineH;
-        }
-      } else {
-        ctx.textAlign = 'left';
-        for (const ln of lines) {
-          ctx.fillText(ln, x, yy);
-          yy += lineH;
-        }
-      }
-      return yy;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      lines.forEach((line, i) => ctx.fillText(line, x, y + i * lh));
+      return y + lines.length * lh;
     }
 
     function drawKeycaps(keys, x, y) {
-      const capH = Math.floor(clamp(36 * uiScale, 22, 46));
-      const padX = Math.floor(clamp(14 * uiScale, 8, 16));
-      const radius = Math.floor(clamp(10 * uiScale, 6, 12));
-      const sepW = Math.floor(clamp(24 * uiScale, 14, 30));
+      const capH = tiny ? 18 : 24;
+      const padX = tiny ? 7 : 9;
+      const sep = tiny ? 8 : 12;
       let cx = x;
       for (let i = 0; i < keys.length; i++) {
         const k = keys[i];
         ctx.font = `700 ${keyFont}px Segoe UI`;
-        const capW = Math.max(capH, Math.ceil(ctx.measureText(k).width + padX * 2));
-
-        roundedRectPath(cx, y, capW, capH, radius);
-        ctx.fillStyle = 'rgba(18,24,38,0.9)';
+        const w = Math.max(capH, Math.ceil(ctx.measureText(k).width + padX * 2));
+        roundedRectPath(cx, y, w, capH, 7);
+        ctx.fillStyle = 'rgba(15, 40, 83, 0.95)';
         ctx.fill();
-        roundedRectPath(cx + 1, y + 1, capW - 2, capH * 0.45, Math.max(3, radius - 2));
-        ctx.fillStyle = 'rgba(255,255,255,0.08)';
-        ctx.fill();
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1.4;
-        roundedRectPath(cx, y, capW, capH, radius);
+        ctx.strokeStyle = '#93f8d7';
+        ctx.lineWidth = 1.2;
         ctx.stroke();
-
         ctx.fillStyle = '#ffffff';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(k, cx + capW * 0.5, y + capH * 0.52);
-
-        cx += capW;
+        ctx.fillText(k, cx + w / 2, y + capH / 2 + 0.2);
+        cx += w;
         if (i < keys.length - 1) {
-          ctx.font = `700 ${Math.max(10, keyFont - 1)}px Segoe UI`;
-          ctx.fillStyle = '#bfd0e8';
-          ctx.fillText(' / ', cx + sepW * 0.5, y + capH * 0.52);
-          cx += sepW;
+          ctx.fillStyle = '#cbf8ff';
+          ctx.fillText('/', cx + sep * 0.45, y + capH * 0.5);
+          cx += sep;
         }
       }
       return { width: cx - x, height: capH };
     }
 
-    // Backdrop + vignette
-    const vignette = ctx.createRadialGradient(W * 0.5, H * 0.5, Math.min(W, H) * 0.2, W * 0.5, H * 0.5, Math.max(W, H) * 0.65);
-    vignette.addColorStop(0, 'rgba(2,7,14,0.35)');
-    vignette.addColorStop(1, 'rgba(0,0,0,0.78)');
-    ctx.fillStyle = vignette;
+    ctx.fillStyle = 'rgba(1, 8, 24, 0.72)';
     ctx.fillRect(0, 0, W, H);
 
-    roundedRectPath(panelX, panelY, panelW, panelH, Math.floor(clamp(22 * uiScale, 12, 28)));
-    ctx.fillStyle = 'rgba(8, 14, 24, 0.9)';
+    roundedRectPath(panelX, panelY, panelW, panelH, 16);
+    const panelGrad = ctx.createLinearGradient(panelX, panelY, panelX, panelY + panelH);
+    panelGrad.addColorStop(0, 'rgba(10, 40, 94, 0.96)');
+    panelGrad.addColorStop(1, 'rgba(5, 24, 62, 0.96)');
+    ctx.fillStyle = panelGrad;
     ctx.fill();
-    ctx.strokeStyle = 'rgba(180, 205, 235, 0.4)';
+    ctx.strokeStyle = '#82f5db';
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    const colPad = Math.floor(clamp(28 * uiScale, 14, 36));
-    const contentX = panelX + colPad;
-    const contentW = panelW - colPad * 2;
-    let y = panelY + colPad;
+    const pad = tiny ? 12 : 18;
+    const headerH = tiny ? 78 : 104;
+    const headerX = panelX + pad;
+    const headerY = panelY + pad;
+    const headerW = panelW - pad * 2;
 
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillStyle = '#ffffff';
     ctx.font = `800 ${titleSize}px Segoe UI`;
-    ctx.fillText('SPACE RECYCLE HERO', contentX, y);
-    y += titleSize + Math.floor(clamp(6 * uiScale, 4, 10));
-
+    ctx.fillText('SPACE RECYCLE HERO', headerX, headerY);
     ctx.fillStyle = '#9cf9ff';
     ctx.font = `700 ${subtitleSize}px Segoe UI`;
-    ctx.fillText('MISSION CONTROLS', contentX, y);
-    y += subtitleSize + Math.floor(clamp(10 * uiScale, 8, 14));
+    ctx.fillText('MISSION CONTROLS', headerX, headerY + titleSize + 4);
+    ctx.fillStyle = '#cafef3';
+    ctx.font = `600 ${Math.max(10, bodySize - 1)}px Segoe UI`;
+    ctx.fillText('H closes this panel • ESC pauses • Resize-safe layout', headerX, headerY + titleSize + subtitleSize + 10);
 
-    ctx.strokeStyle = 'rgba(120, 170, 220, 0.45)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(contentX, y);
-    ctx.lineTo(contentX + contentW, y);
-    ctx.stroke();
-    y += Math.floor(clamp(14 * uiScale, 10, 18));
+    const bodyX = panelX + pad;
+    const bodyY = panelY + headerH;
+    const bodyW = panelW - pad * 2;
+    const bodyH = panelH - headerH - pad;
 
-    const lineH = Math.floor(clamp(bodySize * 1.35, 15, 30));
-    for (const line of storyBlurb) {
-      y = drawWrappedText(line, contentX, y, contentW, lineH);
-    }
-    y += Math.floor(clamp(8 * uiScale, 6, 12));
-
-    function drawBulletSection(title, bullets) {
-      ctx.fillStyle = '#ffffff';
-      ctx.font = `700 ${sectionSize}px Segoe UI`;
-      ctx.fillText(title, contentX, y);
-      y += sectionSize + Math.floor(clamp(5 * uiScale, 4, 9));
-
-      for (const b of bullets) {
-        ctx.fillStyle = '#8ce5ff';
-        ctx.font = `700 ${Math.max(10, bodySize)}px Segoe UI`;
-        ctx.fillText('•', contentX, y + 1);
-        y = drawWrappedText(b, contentX + Math.floor(clamp(16 * uiScale, 10, 20)), y, contentW - Math.floor(clamp(16 * uiScale, 10, 20)), lineH, '#d9e7f8', `500 ${bodySize}px Segoe UI`);
-      }
-      y += Math.floor(clamp(6 * uiScale, 4, 10));
+    let col1X = bodyX;
+    let col1W = bodyW;
+    let col2X = bodyX;
+    let col2W = 0;
+    if (!compact) {
+      col1W = Math.floor(bodyW * 0.58);
+      col2X = bodyX + col1W + 16;
+      col2W = bodyW - col1W - 16;
     }
 
-    drawBulletSection('How to Play', howToPlay);
-    drawBulletSection('Tips', tips);
+    const keyColW = compact ? Math.max(130, col1W * 0.38) : Math.max(150, col1W * 0.34);
+    const descX = col1X + keyColW + 12;
+    const descW = Math.max(120, col1W - keyColW - 12);
 
-    ctx.strokeStyle = 'rgba(120, 170, 220, 0.45)';
-    ctx.beginPath();
-    ctx.moveTo(contentX, y);
-    ctx.lineTo(contentX + contentW, y);
-    ctx.stroke();
-    y += Math.floor(clamp(14 * uiScale, 10, 18));
-
-    // Controls grid
-    ctx.fillStyle = '#ffffff';
-    ctx.font = `700 ${sectionSize}px Segoe UI`;
-    ctx.fillText('Controls', contentX, y);
-    y += sectionSize + Math.floor(clamp(8 * uiScale, 6, 12));
-
-    const keyColW = clamp(contentW * 0.34, 170, 310);
-    const descX = contentX + keyColW + Math.floor(clamp(16 * uiScale, 10, 24));
-    const descW = contentW - keyColW - Math.floor(clamp(16 * uiScale, 10, 24));
-
+    let y = bodyY + 6;
     for (const row of controls) {
-      const cap = drawKeycaps(row.keys, contentX, y);
-      const descLineH = Math.floor(clamp(bodySize * 1.3, 14, 28));
-      const descFont = `600 ${bodySize}px Segoe UI`;
-      const descLines = getWrappedLines(row.text, descW, descFont);
-      const descBlockH = descLines.length * descLineH;
-      const descY = y + Math.max(0, Math.floor((cap.height - descBlockH) * 0.5));
-      const descYEnd = drawWrappedText(row.text, descX, descY, descW, descLineH, '#f0f5ff', descFont, 'left');
-      y = Math.max(y + cap.height, descYEnd) + Math.floor(clamp(8 * uiScale, 5, 10));
+      if (y > bodyY + bodyH - lineH * 1.6) break;
+      const cap = drawKeycaps(row.keys, col1X, y + 1);
+      const txtY = y + Math.max(0, Math.floor((cap.height - lineH) * 0.4));
+      const endY = drawWrappedText(row.text, descX, txtY, descW, lineH, `600 ${bodySize}px Segoe UI`, '#ebf6ff');
+      y = Math.max(y + cap.height, endY) + (tiny ? 4 : 6);
     }
 
-    const footerLineH = Math.floor(clamp(bodySize * 1.3, 14, 28));
-    const footerText = 'Land gently on skids, refuel pads refill fuel, and recycle pads score delivered cargo.';
-    ctx.font = `600 ${bodySize}px Segoe UI`;
-    const footerWords = footerText.split(' ');
-    let footerLines = 1;
-    let probeLine = '';
-    for (const word of footerWords) {
-      const nextProbe = probeLine ? `${probeLine} ${word}` : word;
-      if (ctx.measureText(nextProbe).width > contentW && probeLine) {
-        footerLines += 1;
-        probeLine = word;
-      } else {
-        probeLine = nextProbe;
+    const tips = [
+      '• Keep tray closed when moving fast to prevent cargo spill.',
+      '• Refuel pads refill while safely landed.',
+      '• Track mode is best for precise ground movement.',
+      '• Deliver cargo to recycle pads for score.'
+    ];
+
+    if (!compact) {
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `700 ${Math.max(14, bodySize + 2)}px Segoe UI`;
+      ctx.fillText('Mission Tips', col2X, bodyY + 6);
+      let tipY = bodyY + 32;
+      for (const tip of tips) {
+        tipY = drawWrappedText(tip, col2X, tipY, col2W, lineH + 1, `600 ${bodySize}px Segoe UI`, '#c9f2e8') + 6;
+        if (tipY > bodyY + bodyH - lineH * 2) break;
       }
+    } else {
+      const footerText = tiny
+        ? 'Collect, recycle, refuel, survive.'
+        : 'Collect debris, recycle for points, and refuel on pads to stay in mission.';
+      ctx.fillStyle = '#c9f2e8';
+      ctx.font = `600 ${bodySize}px Segoe UI`;
+      drawWrappedText(footerText, bodyX, panelY + panelH - pad - lineH * (tiny ? 1 : 2), bodyW, lineH, `600 ${bodySize}px Segoe UI`, '#c9f2e8');
     }
-
-    const footerY = panelY + panelH - colPad - footerLineH * footerLines;
-    drawWrappedText(footerText, contentX, footerY, contentW, footerLineH, '#bfe8c8', `600 ${bodySize}px Segoe UI`);
   }
 
 
