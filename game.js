@@ -5,6 +5,8 @@
   // Tunable constants
   // =========================
   const CONFIG = {
+    // 2026 neon/bubbly refresh tuning
+
     METER_TO_PX: 40,
     gravity: 1.62,
     thrustMax: 10,
@@ -49,6 +51,20 @@
     trackDriveMaxSpeed: 1.35,
     landingGearTransitionSec: 2,
     trayCapacity: 5,
+  };
+
+
+  const THEME = {
+    skyTop: '#68d9ff',
+    skyBottom: '#1d62d5',
+    cloudGlow: 'rgba(199, 255, 245, 0.35)',
+    terrain: '#2f9a7f',
+    terrainShadow: '#18715c',
+    recycle: '#31ffa5',
+    refuel: '#4fd6ff',
+    panelBg: 'rgba(2, 24, 54, 0.86)',
+    panelStroke: '#68f5c7',
+    panelText: '#c5fff4',
   };
 
   const canvas = document.getElementById('gameCanvas');
@@ -159,6 +175,7 @@
       else if (game.state === 'PLAYING') {
         ship.trayExtended = !ship.trayExtended;
         playTraySealSound(ship.trayExtended);
+        playUiChime('ui');
       }
     }
     if (e.code === 'KeyH') {
@@ -181,10 +198,12 @@
       const canToggleOff = ship.tracksExtended && ship.landed && Math.hypot(ship.vx, ship.vy) < 0.9;
       if (canToggleOn) {
         ship.tracksExtended = true;
+        playUiChime('ui');
         ship.throttle = 0;
         ship.gearExtended = false;
       } else if (canToggleOff) {
         ship.tracksExtended = false;
+        playUiChime('ui');
         ship.gearExtended = true;
         ship.gearSafetyTimer = CONFIG.landingGearTransitionSec + 0.35;
       }
@@ -208,6 +227,7 @@
     if (e.code === 'Escape' && game.state !== 'CRASHED' && game.state !== 'READY') {
       game.paused = !game.paused;
       if (!game.paused) game.showHelp = false;
+      playUiChime('ui');
     }
   }, { passive: false });
   window.addEventListener('pointerdown', unlockAudioFromUserGesture, { passive: true });
@@ -323,7 +343,7 @@
       a: Math.random() * 0.72 + 0.18,
     }));
 
-    const palette = ['#5f7cff', '#d39bff', '#ffd38a', '#8de4ff', '#9ad2ff'];
+    const palette = ['#1cf0ff', '#6cf9a5', '#8cb6ff', '#ffd86b', '#63fff0'];
     planets = Array.from({ length: CONFIG.planetCount }, () => ({
       x: Math.random() * CONFIG.worldWidth,
       y: Math.random() * 68 - 14,
@@ -457,8 +477,8 @@
       r: type.r,
       mass: type.mass,
       points: type.points,
-      color: `hsl(${hue} 68% 68%)`,
-      accent: `hsl(${(hue + 180) % 360} 78% 36%)`,
+      color: `hsl(${hue} 88% 66%)`,
+      accent: `hsl(${(hue + 180) % 360} 88% 30%)`,
       type: type.name,
       shape: cargoShapes[shapeIndex % cargoShapes.length],
       grabbed: false,
@@ -524,6 +544,8 @@
     audio: null,
     supplyShips: [],
     supplySpawnTimer: CONFIG.supplyShipIntervalSec,
+    lastRefuelChimeFuel: 0,
+    wasLanded: true,
     radioMessage: { text: '', timer: 0 },
   };
 
@@ -614,7 +636,7 @@
       ctx.fill();
       ctx.fillStyle = '#6f7f96';
       ctx.fillRect(-16, -2, 20, 4);
-      ctx.fillStyle = '#9ce8ff';
+      ctx.fillStyle = '#9cf9ff';
       ctx.fillRect(5, -1, 12, 2);
       ctx.restore();
     }
@@ -673,6 +695,9 @@
     game.camera.x = ship.x;
     game.camera.y = ship.y - 6;
     game.state = 'PLAYING';
+    game.wasLanded = true;
+    game.lastRefuelChimeFuel = 0;
+    playUiChime('start');
     game.showHelp = false;
     initAudio();
   }
@@ -886,6 +911,54 @@
     thud.stop(now + 0.18);
   }
 
+
+
+  function playUiChime(kind = 'ui') {
+    const a = game.audio;
+    if (!a) return;
+    const now = a.ctx.currentTime;
+    const osc = a.ctx.createOscillator();
+    const gain = a.ctx.createGain();
+    osc.type = 'triangle';
+    const pairs = {
+      ui: [520, 680],
+      start: [430, 860],
+      pickup: [780, 1180],
+      landing: [600, 760],
+      score: [740, 1040],
+      refuel: [490, 710],
+    };
+    const [f1, f2] = pairs[kind] || pairs.ui;
+    osc.frequency.setValueAtTime(f1, now);
+    osc.frequency.exponentialRampToValueAtTime(f2, now + 0.12);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.linearRampToValueAtTime(0.05, now + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+    osc.connect(gain);
+    gain.connect(a.master);
+    osc.start(now);
+    osc.stop(now + 0.18);
+  }
+
+  function playScoreCelebration(points = 100) {
+    const a = game.audio;
+    if (!a) return;
+    const now = a.ctx.currentTime;
+    const tones = points >= 200 ? [740, 980, 1320] : [620, 840, 1040];
+    tones.forEach((f, i) => {
+      const osc = a.ctx.createOscillator();
+      const gain = a.ctx.createGain();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(f, now + i * 0.04);
+      gain.gain.setValueAtTime(0.0001, now + i * 0.04);
+      gain.gain.linearRampToValueAtTime(0.045, now + i * 0.04 + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.04 + 0.12);
+      osc.connect(gain);
+      gain.connect(a.master);
+      osc.start(now + i * 0.04);
+      osc.stop(now + i * 0.04 + 0.13);
+    });
+  }
   function updateAudio() {
     const a = game.audio;
     if (!a) return;
@@ -1296,6 +1369,7 @@
       ship.settleLock = true;
     }
 
+    const wasLandedFrame = ship.landed;
     ship.landed = (tracksDriving && hasSkid) || (hasSkid && angleOk && speedOk && (verticalOk || ship.settleLock)) || (!tracksDriving && hullHitTerrain && speed < CONFIG.landingMaxSpeed * CONFIG.impactRobustness);
     const liftOffRequested = !tracksDriving && !tracksLock && ship.throttle >= 0.2 && ship.fuel > 0;
     if (ship.landed && liftOffRequested) {
@@ -1346,8 +1420,14 @@
     // Refuel only with safe skid landing on refuel pad.
     if (ship.landed) {
       const refuel = terrain.pads.find(p => p.kind === 'refuel' && Math.abs(ship.x - p.x) <= p.w * 0.45);
-      if (refuel) ship.fuel = clamp(ship.fuel + 100 * dt, 0, 100);
+      if (refuel) {
+        const before = ship.fuel;
+        ship.fuel = clamp(ship.fuel + 100 * dt, 0, 100);
+        if (Math.floor(ship.fuel / 12) > Math.floor(before / 12)) playUiChime('refuel');
+      }
     }
+
+    if (!wasLandedFrame && ship.landed) playUiChime('landing');
   }
 
   function updateCargo(dt) {
@@ -1385,6 +1465,7 @@
         if (pick) {
           pick.grabbed = true;
           ship.grabbedCargo = pick.id;
+          playUiChime('pickup');
         }
       }
     }
@@ -1492,6 +1573,7 @@
       if (!ship.storedCargoIds.includes(c.id)) {
         ship.storedCargoIds.push(c.id);
         ship.cargoMass += c.mass;
+        playUiChime('pickup');
       }
     }
 
@@ -1516,6 +1598,7 @@
             if (!ship.storedCargoIds.includes(c.id)) {
               ship.storedCargoIds.push(c.id);
               ship.cargoMass += c.mass;
+              playUiChime('pickup');
             }
           }
         }
@@ -1575,6 +1658,7 @@
         c.targetX = pad.x + pad.w * 0.36;
         c.targetY = pad.y - 0.65;
         game.score += c.points;
+        playScoreCelebration(c.points);
       }
     }
 
@@ -1649,7 +1733,17 @@
   }
 
   function drawBackground() {
-    ctx.fillStyle = '#02030b';
+    const sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, THEME.skyTop);
+    sky.addColorStop(0.55, '#39a2f5');
+    sky.addColorStop(1, THEME.skyBottom);
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, H);
+
+    const sun = ctx.createRadialGradient(W * 0.12, H * 0.2, 20, W * 0.12, H * 0.2, Math.min(W, H) * 0.3);
+    sun.addColorStop(0, 'rgba(255,255,210,0.72)');
+    sun.addColorStop(1, 'rgba(255,255,210,0)');
+    ctx.fillStyle = sun;
     ctx.fillRect(0, 0, W, H);
 
     // Animated background set pieces: floating ISS and decorative UFOs (visual only, non-interactive).
@@ -1780,14 +1874,14 @@
     ctx.lineTo(end.x, gameplayH + 30);
     ctx.lineTo(first.x, gameplayH + 30);
     ctx.closePath();
-    ctx.fillStyle = '#3c3f4a';
+    ctx.fillStyle = THEME.terrain;
     ctx.fill();
 
     for (const pad of terrain.pads) {
       const left = toScreen(pad.x - pad.w / 2, pad.y);
       const right = toScreen(pad.x + pad.w / 2, pad.y);
 
-      ctx.strokeStyle = pad.kind === 'recycle' ? '#6cff9f' : '#66d7ff';
+      ctx.strokeStyle = pad.kind === 'recycle' ? THEME.recycle : THEME.refuel;
       ctx.lineWidth = 6.4;
       ctx.beginPath();
       ctx.moveTo(left.x, left.y - 2);
@@ -1795,12 +1889,12 @@
       ctx.stroke();
 
       const b = toScreen(pad.x + pad.w * 0.35, pad.y - 0.1);
-      ctx.fillStyle = '#7f858f';
+      ctx.fillStyle = '#7de6c5';
       ctx.fillRect(b.x, b.y - 42, 40, 42);
 
-      ctx.fillStyle = '#121419';
+      ctx.fillStyle = '#0c3663';
       ctx.fillRect(b.x + 10, b.y - 33, 20, 12);
-      ctx.fillStyle = '#d8dee9';
+      ctx.fillStyle = '#d6fff5';
       ctx.font = 'bold 12px Segoe UI';
       if (pad.kind === 'recycle') {
         ctx.fillStyle = '#6f7782';
@@ -1812,12 +1906,12 @@
         ctx.lineTo(b.x, b.y - 12);
         ctx.closePath();
         ctx.fill();
-        ctx.fillStyle = '#8affb0';
+        ctx.fillStyle = THEME.recycle;
         ctx.fillRect(left.x + 8, left.y - 22, Math.max(120, right.x - left.x - 16), 18);
         ctx.fillStyle = '#082b15';
         ctx.fillText('RECYCLE HERE', left.x + 16, left.y - 8);
       } else {
-        ctx.fillStyle = '#8ecfff';
+        ctx.fillStyle = THEME.refuel;
         ctx.fillRect(left.x + 10, left.y - 20, Math.max(95, right.x - left.x - 20), 16);
         ctx.fillStyle = '#06293e';
         ctx.fillText('REFUEL', left.x + 22, left.y - 8);
@@ -1952,7 +2046,7 @@
     ctx.fillRect((tr.x + trayVisualW) * m - trayEdgeW, trayVisualY * m, trayEdgeW, trayVisualH * m);
 
     if (ship.traySlide > 0.2) {
-      ctx.fillStyle = '#000000';
+      ctx.fillStyle = '#0f3364';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.font = `700 ${Math.max(10, Math.floor(0.21 * m))}px "Segoe UI", Arial, sans-serif`;
@@ -2268,14 +2362,14 @@
       const padX = Math.max(6, Math.floor(8 * uiScale));
       const maxTextW = Math.max(18, w - padX * 2);
       const valueText = `${Math.round(value * 100)}${unit}`;
-      ctx.fillStyle = '#000';
+      ctx.fillStyle = THEME.panelBg;
       ctx.fillRect(x, panelY, w, panelH);
-      ctx.strokeStyle = '#0b5';
+      ctx.strokeStyle = THEME.panelStroke;
       ctx.strokeRect(x, panelY, w, panelH);
       ctx.fillStyle = '#0f7d3a';
       const fillW = Math.max(0, Math.min(1, value)) * (w - 18);
       ctx.fillRect(x + 9, panelY + panelH * 0.55, fillW, panelH * 0.28);
-      ctx.fillStyle = '#7dff9c';
+      ctx.fillStyle = THEME.panelText;
       drawFittedText(label, x + padX, panelY + Math.max(14, Math.floor(20 * uiScale)), maxTextW, Math.max(10, Math.floor(14 * uiScale)), 7, 'Segoe UI');
       drawFittedText(valueText, x + padX, panelY + Math.max(30, Math.floor(44 * uiScale)), maxTextW, Math.max(11, Math.floor(18 * uiScale)), 8, 'Consolas, monospace');
     }
@@ -2319,9 +2413,9 @@
     const attitudeX = cursorX;
     const gx = attitudeX + attitudePanelW / 2;
     const gy = panelY + panelH / 2 + 10;
-    ctx.fillStyle = '#000';
+    ctx.fillStyle = THEME.panelBg;
     ctx.fillRect(attitudeX, panelY, attitudePanelW, panelH);
-    ctx.strokeStyle = '#0b5';
+    ctx.strokeStyle = THEME.panelStroke;
     ctx.strokeRect(attitudeX, panelY, attitudePanelW, panelH);
     ctx.strokeStyle = '#7dff9c';
     ctx.lineWidth = 2;
@@ -2337,7 +2431,7 @@
     ctx.lineTo(gaugeSize * 0.28, 0);
     ctx.stroke();
     ctx.restore();
-    ctx.fillStyle = '#7dff9c';
+    ctx.fillStyle = THEME.panelText;
     drawFittedText('ATTITUDE', attitudeX + 8, panelY + 16, Math.max(18, attitudePanelW - 16), Math.max(10, Math.floor(13 * uiScale)), 7, 'Segoe UI');
     cursorX += attitudePanelW + gap;
 
@@ -2356,9 +2450,9 @@
     const redStartAng = lerp(speedStartAng, speedEndAng, redNorm);
     const speedAng = lerp(speedStartAng, speedEndAng, speedNorm);
 
-    ctx.fillStyle = '#000';
+    ctx.fillStyle = THEME.panelBg;
     ctx.fillRect(speedX, panelY, speedW, panelH);
-    ctx.strokeStyle = '#0b5';
+    ctx.strokeStyle = THEME.panelStroke;
     ctx.strokeRect(speedX, panelY, speedW, panelH);
 
     const speedRadius = gaugeSize * 0.36;
@@ -2403,7 +2497,7 @@
     ctx.stroke();
     ctx.restore();
 
-    ctx.fillStyle = '#7dff9c';
+    ctx.fillStyle = THEME.panelText;
     const speedPadX = 10;
     const speedTextW = Math.max(18, speedW - speedPadX * 2);
     drawFittedText('SPEED', speedX + speedPadX, panelY + 16, speedTextW, Math.max(10, Math.floor(13 * uiScale)), 7, 'Segoe UI');
@@ -2422,9 +2516,9 @@
     const weightEndAng = Math.PI * (11 / 6);
     const weightAng = lerp(weightStartAng, weightEndAng, weightNorm);
 
-    ctx.fillStyle = '#000';
+    ctx.fillStyle = THEME.panelBg;
     ctx.fillRect(weightX, panelY, weightW, panelH);
-    ctx.strokeStyle = '#0b5';
+    ctx.strokeStyle = THEME.panelStroke;
     ctx.strokeRect(weightX, panelY, weightW, panelH);
     ctx.strokeStyle = '#7dff9c';
     ctx.lineWidth = 2;
@@ -2454,7 +2548,7 @@
     ctx.stroke();
     ctx.restore();
 
-    ctx.fillStyle = '#7dff9c';
+    ctx.fillStyle = THEME.panelText;
     const weightPadX = 10;
     const weightTextW = Math.max(18, weightW - weightPadX * 2);
     drawFittedText('WEIGHT', weightX + weightPadX, panelY + 16, weightTextW, Math.max(10, Math.floor(13 * uiScale)), 7, 'Segoe UI');
@@ -2463,15 +2557,15 @@
     cursorX += weightW + gap;
 
     const dX = cursorX;
-    ctx.fillStyle = '#000';
+    ctx.fillStyle = THEME.panelBg;
     ctx.fillRect(dX, panelY, distW, panelH);
-    ctx.strokeStyle = '#0b5';
+    ctx.strokeStyle = THEME.panelStroke;
     ctx.strokeRect(dX, panelY, distW, panelH);
     const dist = distanceToGroundMeters();
     const distPadX = 12;
     const distLabelMaxW = Math.max(18, distW - distPadX * 2);
     const distValue = `${dist.toFixed(1)} m`;
-    ctx.fillStyle = '#7dff9c';
+    ctx.fillStyle = THEME.panelText;
     const distLabelSize = fitFontSize(
       'DISTANCE TO GROUND',
       distLabelMaxW,
@@ -2493,11 +2587,11 @@
 
     const scoreX = cursorX;
     const scoreW = panelW(panelWeights.score);
-    ctx.fillStyle = '#000';
+    ctx.fillStyle = THEME.panelBg;
     ctx.fillRect(scoreX, panelY, scoreW, panelH);
-    ctx.strokeStyle = '#0b5';
+    ctx.strokeStyle = THEME.panelStroke;
     ctx.strokeRect(scoreX, panelY, scoreW, panelH);
-    ctx.fillStyle = '#7dff9c';
+    ctx.fillStyle = THEME.panelText;
     const scorePadX = 12;
     const scoreTextW = Math.max(18, scoreW - scorePadX * 2);
     drawFittedText('SCORE', scoreX + scorePadX, panelY + 22, scoreTextW, Math.max(10, Math.floor(15 * uiScale)), 7, 'Segoe UI');
@@ -2522,9 +2616,9 @@
     const mapWorldX = (x) => mapX + (x / CONFIG.worldWidth) * mapW;
     const mapWorldY = (y) => mapY + ((y - mapTopWorldY) / Math.max(0.01, mapBottomWorldY - mapTopWorldY)) * mapH;
 
-    ctx.fillStyle = '#000';
+    ctx.fillStyle = THEME.panelBg;
     ctx.fillRect(panelX, panelY, panelW, panelH);
-    ctx.strokeStyle = '#0b5';
+    ctx.strokeStyle = THEME.panelStroke;
     ctx.lineWidth = 2;
     ctx.strokeRect(panelX, panelY, panelW, panelH);
 
@@ -2564,7 +2658,7 @@
     ctx.lineWidth = 1;
     ctx.stroke();
 
-    ctx.fillStyle = '#7dff9c';
+    ctx.fillStyle = THEME.panelText;
     ctx.font = 'bold 12px Segoe UI';
     ctx.textAlign = 'left';
     ctx.fillText('MINI MAP', panelX + 8, panelY + 14);
@@ -2749,7 +2843,7 @@
     ctx.fillText('SPACE RECYCLE HERO', contentX, y);
     y += titleSize + Math.floor(clamp(6 * uiScale, 4, 10));
 
-    ctx.fillStyle = '#9ce8ff';
+    ctx.fillStyle = '#9cf9ff';
     ctx.font = `700 ${subtitleSize}px Segoe UI`;
     ctx.fillText('MISSION CONTROLS', contentX, y);
     y += subtitleSize + Math.floor(clamp(10 * uiScale, 8, 14));
@@ -2915,7 +3009,7 @@
     }
 
     if (game.state === 'READY') {
-      ctx.fillStyle = 'rgba(0,0,0,0.42)';
+      ctx.fillStyle = 'rgba(7, 29, 74, 0.36)';
       ctx.fillRect(0, 0, W, H);
 
       const gameplayH = getGameplayHeight();
@@ -2938,10 +3032,10 @@
       ctx.font = `bold ${titleSize}px Segoe UI`;
       ctx.fillText('SPACE RECYCLE HERO', W / 2, titleY);
       ctx.font = `bold ${subSize}px Segoe UI`;
-      ctx.fillStyle = '#9ce8ff';
+      ctx.fillStyle = '#9cf9ff';
       ctx.fillText('PRESS SPACE TO START', W / 2, subY);
 
-      ctx.fillStyle = '#ff4f4f';
+      ctx.fillStyle = '#e2ff7a';
       ctx.font = `bold ${Math.max(14, Math.round(subSize * 0.78))}px Segoe UI`;
       ctx.fillText('PRESS H FOR CONTROLS', W / 2, subY + Math.max(30, subSize * 1.6));
       ctx.textAlign = 'left';
