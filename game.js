@@ -1997,9 +1997,10 @@
     ctx.translate(issX, issY);
     ctx.rotate(Math.sin(bgTime * 0.2) * 0.06 - 0.08);
     ctx.globalAlpha = 1;
-    // Opaque backdrop mask so stars never show through the station silhouette.
+    // Opaque per-part underpaint so stars don't bleed through station parts.
     ctx.fillStyle = '#0b1e40';
-    ctx.fillRect(-58 * issScale, -19 * issScale, 116 * issScale, 38 * issScale);
+    ctx.fillRect(-8.6 * issScale, -3.6 * issScale, 17.2 * issScale, 7.2 * issScale);
+    ctx.fillRect(-4.6 * issScale, -7.6 * issScale, 9.2 * issScale, 15.2 * issScale);
     ctx.fillStyle = '#9fb0c7';
     ctx.fillRect(-8 * issScale, -3 * issScale, 16 * issScale, 6 * issScale);
     ctx.fillStyle = '#6d7f98';
@@ -2011,6 +2012,10 @@
     for (let i = 0; i < 4; i++) {
       const leftX = (-54 * issScale) + i * (panelW + panelGap);
       const rightX = (13 * issScale) + i * (panelW + panelGap);
+      ctx.fillStyle = '#0b1e40';
+      ctx.fillRect(leftX - 0.7 * issScale, -17.2 * issScale, panelW + 1.4 * issScale, panelH + 1.4 * issScale);
+      ctx.fillRect(rightX - 0.7 * issScale, -17.2 * issScale, panelW + 1.4 * issScale, panelH + 1.4 * issScale);
+      ctx.fillStyle = '#4f7cc5';
       ctx.fillRect(leftX, -16.5 * issScale, panelW, panelH);
       ctx.fillRect(rightX, -16.5 * issScale, panelW, panelH);
     }
