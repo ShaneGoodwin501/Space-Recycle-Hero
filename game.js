@@ -667,6 +667,7 @@
       dir,
       team,
       hp: 1,
+      age: 0,
       cooldown: 0.35 + Math.random() * 1.4,
       life: 26 + Math.random() * 18,
       thrustPhase: Math.random() * Math.PI * 2,
@@ -692,6 +693,7 @@
     }
 
     for (const shipFx of game.bgBattleShips) {
+      shipFx.age += dt;
       shipFx.cooldown -= dt;
       shipFx.thrustPhase += dt * (2.8 + Math.random() * 0.8);
       let target = null;
@@ -770,7 +772,7 @@
       for (const shipFx of game.bgBattleShips) {
         if (shipFx.team === bolt.team) continue;
         if (Math.hypot(shipFx.x - bolt.x, shipFx.y - bolt.y) < 0.75) {
-          shipFx.hp -= 1;
+          if (shipFx.age >= 20) shipFx.hp -= 1;
           bolt.life = 0;
           game.bgBattleBursts.push({
             x: shipFx.x,
@@ -801,11 +803,22 @@
     for (const bolt of game.bgBattleBolts) {
       const s = toScreen(bolt.x, bolt.y);
       if (s.x < -8 || s.x > W + 8 || s.y < -8 || s.y > clipBottom) continue;
-      ctx.strokeStyle = '#ff3b3b';
-      ctx.lineWidth = 1.4;
+      const tx = s.x - bolt.vx * 0.35;
+      const ty = s.y - bolt.vy * 0.35;
+      ctx.strokeStyle = 'rgba(255, 40, 40, 0.42)';
+      ctx.lineWidth = 2.34; // ~30% thicker than previous beam width
+      ctx.shadowColor = '#ff1f1f';
+      ctx.shadowBlur = 9;
       ctx.beginPath();
       ctx.moveTo(s.x, s.y);
-      ctx.lineTo(s.x - bolt.vx * 0.35, s.y - bolt.vy * 0.35);
+      ctx.lineTo(tx, ty);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = '#ff2d2d';
+      ctx.lineWidth = 1.82; // 30% thicker core beam
+      ctx.beginPath();
+      ctx.moveTo(s.x, s.y);
+      ctx.lineTo(tx, ty);
       ctx.stroke();
     }
 
@@ -1984,6 +1997,9 @@
     ctx.translate(issX, issY);
     ctx.rotate(Math.sin(bgTime * 0.2) * 0.06 - 0.08);
     ctx.globalAlpha = 1;
+    // Opaque backdrop mask so stars never show through the station silhouette.
+    ctx.fillStyle = '#0b1e40';
+    ctx.fillRect(-58 * issScale, -19 * issScale, 116 * issScale, 38 * issScale);
     ctx.fillStyle = '#9fb0c7';
     ctx.fillRect(-8 * issScale, -3 * issScale, 16 * issScale, 6 * issScale);
     ctx.fillStyle = '#6d7f98';
