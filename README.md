@@ -4,6 +4,8 @@
 
 ![Space Recycle Hero title image](./Space%20Recycle%20Hero.jpg)
 
+> **2026 Refresh:** This branch features a bright blue/green retro-arcade visual overhaul inspired by classic Mega Drive palettes, plus expanded procedural synth sound effects for interactions, pickups, landings, refuel ticks, and scoring.
+
 ## Table of Contents
 - [Features](#features)
 - [Requirements](#requirements)
